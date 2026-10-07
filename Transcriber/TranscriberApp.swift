@@ -1,0 +1,51 @@
+import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
+
+@main
+struct TranscriberApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var updater = AppUpdater()
+
+    init() {
+        // A new window with the drop zone is the whole point; skip the Open panel macOS would show at launch.
+        UserDefaults.standard.register(defaults: ["NSShowAppCentricOpenPanelInsteadOfUntitledFile": false])
+    }
+
+    var body: some Scene {
+        DocumentGroup(newDocument: { TranscriptDocument() }) { configuration in
+            DocumentView(document: configuration.document)
+                .environment(updater)
+                .frame(minWidth: 720, minHeight: 480)
+        }
+        .defaultSize(width: 1000, height: 740)
+        .commands {
+            AppCommands(updater: updater)
+        }
+
+        Settings {
+            SettingsView()
+                .environment(updater)
+        }
+    }
+}
+
+/// Receives media files opened from the Finder, the Dock icon, or `open -a Transcriber file.mp4`.
+/// Project files go through the document system as usual.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func application(_ application: NSApplication, open urls: [URL]) {
+        var usedExistingEmptyDocument = false
+        for url in urls {
+            if PendingMedia.isProject(url) {
+                NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
+            } else if PendingMedia.isMedia(url) {
+                PendingMedia.shared.enqueue([url])
+                if !usedExistingEmptyDocument, !PendingMedia.shared.emptyDocumentIDs.isEmpty {
+                    usedExistingEmptyDocument = true
+                } else {
+                    NSDocumentController.shared.newDocument(nil)
+                }
+            }
+        }
+    }
+}
