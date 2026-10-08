@@ -62,6 +62,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            WatchedFoldersSettings()
+
             Section("Updates") {
                 Toggle("Check for updates automatically", isOn: $updater.automaticallyChecksForUpdates)
                 HStack {

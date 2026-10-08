@@ -23,6 +23,11 @@ and export subtitles.
   a newline typed in a cue forces a line break.
 - Projects save as `.transcriber` files (JSON: words, cues, settings and a bookmark + path to
   the media). If the media moved, the window offers Locate…; editing and export work without it.
+- **Watched folders** (Settings): new video or audio files dropped into a watched folder are
+  transcribed automatically and the chosen outputs (SRT, VTT, TXT, Markdown, project) are
+  written next to them, with a notification when done. Files already in the folder are left
+  alone; a file is picked up once it has stopped changing for a few seconds. "Open at Login"
+  (system login item) keeps the app running quietly without a window.
 - Everything runs locally. The first use of a language downloads Apple's speech model for it.
 
 ## Project notes

@@ -33,6 +33,37 @@ struct TranscriberApp: App {
 /// Receives media files opened from the Finder, the Dock icon, or `open -a Transcriber file.mp4`.
 /// Project files go through the document system as usual.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var launchedAtLogin = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        launchedAtLogin = LoginItem.launchEventIsLoginItem
+        Notifier.install()
+        FolderWatcher.shared.configure(accepts: WatchProcessor.accepts, process: WatchProcessor.transcribe)
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        if LoginItem.launchEventIsLoginItem { launchedAtLogin = true }
+        if launchedAtLogin {
+            // Started by the system at login to watch folders: stay out of the way.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                for document in NSDocumentController.shared.documents where !document.isDocumentEdited && document.fileURL == nil {
+                    document.close()
+                }
+            }
+        }
+    }
+
+    /// At a login-item launch there is nobody at the keyboard; don't open an empty window.
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        if LoginItem.launchEventIsLoginItem { launchedAtLogin = true }
+        return !launchedAtLogin
+    }
+
+    /// Keep running without windows while folders are being watched.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        !FolderWatcher.shared.isWatching
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         var usedExistingEmptyDocument = false
         for url in urls {
