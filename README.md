@@ -68,3 +68,7 @@ always-latest link). The EdDSA signing key is in the login keychain under the Sp
 2. `Tools/release.sh` builds, signs and packages `dist/Transcriber <version>.dmg`.
    Add `--notarize` to notarize, and `--notarize --upload` to also sign the update, copy it into
    beardfm.app, add it to the appcast and deploy the site. Commit the beardfm.app changes afterwards.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
