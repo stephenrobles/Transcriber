@@ -1,25 +1,15 @@
-import Speech
 import SwiftUI
 
 struct SettingsView: View {
     @Bindable private var settings = AppSettings.shared
     @Environment(AppUpdater.self) private var updater
-    @State private var supportedLocales: [Locale] = []
-    @State private var installedIdentifiers: Set<String> = []
 
     var body: some View {
         @Bindable var updater = updater
         Form {
             Section("Transcription") {
-                Picker("Language", selection: $settings.localeIdentifier) {
-                    if !supportedLocales.contains(where: { $0.identifier == settings.localeIdentifier }) {
-                        Text(TranscriptionEngine.languageName(settings.locale)).tag(settings.localeIdentifier)
-                    }
-                    ForEach(supportedLocales, id: \.identifier) { locale in
-                        Text(languageTitle(locale)).tag(locale.identifier)
-                    }
-                }
-                Text("Speech is recognized on this Mac with Apple's on-device engine; nothing leaves your computer. A language's model downloads the first time you use it.")
+                LanguagePicker(selection: $settings.localeIdentifier)
+                Text("Speech is recognized on this Mac with Apple's on-device engine; nothing leaves your computer. A language's model downloads the first time you use it. The language can also be changed in the window before each transcription.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -78,15 +68,6 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
-        .task {
-            let supported = await SpeechTranscriber.supportedLocales
-            let installed = await SpeechTranscriber.installedLocales
-            supportedLocales = supported.sorted { languageTitle($0) < languageTitle($1) }
-            installedIdentifiers = Set(installed.map(\.identifier))
-        }
     }
 
-    private func languageTitle(_ locale: Locale) -> String {
-        TranscriptionEngine.languageName(locale)
-    }
 }

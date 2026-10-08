@@ -6,6 +6,7 @@ struct EditorView: View {
     @Bindable var state: EditorState
     let player: PlayerController
     @Environment(\.undoManager) private var undoManager
+    @State private var pendingLanguage: String?
 
     private var settings: AppSettings { AppSettings.shared }
 
@@ -66,10 +67,46 @@ struct EditorView: View {
         .help(tab == .cues ? "Timestamped cues (⌘1)" : "Plain text (⌘2)")
     }
 
+    /// The transcript's language; picking another one transcribes the file again in it.
+    private func languageMenu(current: String) -> some View {
+        Menu {
+            ForEach(LanguageCatalog.shared.supported, id: \.identifier) { locale in
+                Button {
+                    if locale.identifier != current { pendingLanguage = locale.identifier }
+                } label: {
+                    if locale.identifier == current {
+                        Label(LanguageCatalog.name(locale), systemImage: "checkmark")
+                    } else {
+                        Text(LanguageCatalog.name(locale))
+                    }
+                }
+            }
+        } label: {
+            Text(LanguageCatalog.name(Locale(identifier: current)))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Spoken language. Choosing another transcribes the file again.")
+        .onAppear { LanguageCatalog.shared.load() }
+        .confirmationDialog("Transcribe again in \(LanguageCatalog.name(Locale(identifier: pendingLanguage ?? current)))?",
+                            isPresented: Binding(get: { pendingLanguage != nil }, set: { if !$0 { pendingLanguage = nil } })) {
+            Button("Transcribe Again") {
+                if let identifier = pendingLanguage {
+                    settings.localeIdentifier = identifier
+                    document.startTranscription(locale: Locale(identifier: identifier), cueSettings: settings.cueSettings, undoManager: undoManager)
+                }
+                pendingLanguage = nil
+            }
+            Button("Cancel", role: .cancel) { pendingLanguage = nil }
+        } message: {
+            Text("The current transcript and any edits are replaced. You can undo this. The language also becomes the default for new files.")
+        }
+    }
+
     private var statusBar: some View {
         HStack(spacing: 14) {
             if let transcript = document.transcript {
-                Text(TranscriptionEngine.languageName(Locale(identifier: transcript.localeIdentifier)))
+                languageMenu(current: transcript.localeIdentifier)
                 Text("\(transcript.cues.count) cues")
                 Text("\(transcript.words.count) words")
             }

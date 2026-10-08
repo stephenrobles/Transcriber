@@ -39,7 +39,7 @@ final class AppSettings {
     }
 
     private init() {
-        localeIdentifier = defaults.string(forKey: "localeIdentifier") ?? Locale.current.identifier
+        localeIdentifier = LanguageCatalog.normalized(defaults.string(forKey: "localeIdentifier") ?? Locale.current.identifier)
         maxCharactersPerLine = defaults.object(forKey: "maxCharactersPerLine") as? Int ?? 42
         maxLines = defaults.object(forKey: "maxLines") as? Int ?? 2
         maxCueDuration = defaults.object(forKey: "maxCueDuration") as? Double ?? 6

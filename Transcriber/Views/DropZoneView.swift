@@ -4,7 +4,7 @@ struct DropZoneView: View {
     let isMissingMedia: Bool
     let onChoose: () -> Void
 
-    private var settings: AppSettings { AppSettings.shared }
+    @Bindable private var settings = AppSettings.shared
 
     var body: some View {
         VStack(spacing: 22) {
@@ -36,9 +36,15 @@ struct DropZoneView: View {
             Button(isMissingMedia ? "Locate File…" : "Choose File…", action: onChoose)
                 .controlSize(.large)
                 .buttonStyle(.borderedProminent)
-            Text("Transcribes in \(TranscriptionEngine.languageName(settings.locale)). Change the language in Settings.")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
+            HStack(spacing: 6) {
+                Text("Spoken language")
+                    .foregroundStyle(.secondary)
+                LanguagePicker(selection: $settings.localeIdentifier)
+                    .labelsHidden()
+                    .fixedSize()
+            }
+            .font(.callout)
+            .help("The language of the speech in the files you drop here")
             Spacer()
         }
         .padding(40)

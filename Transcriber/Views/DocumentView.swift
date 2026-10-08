@@ -126,7 +126,7 @@ struct ReadyView: View {
     let player: PlayerController
     let onTranscribe: () -> Void
 
-    private var settings: AppSettings { AppSettings.shared }
+    @Bindable private var settings = AppSettings.shared
 
     var body: some View {
         VStack(spacing: 18) {
@@ -158,9 +158,14 @@ struct ReadyView: View {
             .controlSize(.large)
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
-            Text("Language: \(TranscriptionEngine.languageName(settings.locale)). Change it in Settings.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text("Spoken language")
+                    .foregroundStyle(.secondary)
+                LanguagePicker(selection: $settings.localeIdentifier)
+                    .labelsHidden()
+                    .fixedSize()
+            }
+            .font(.callout)
             Spacer()
         }
         .padding(40)

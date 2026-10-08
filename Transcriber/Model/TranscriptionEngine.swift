@@ -32,7 +32,7 @@ nonisolated enum TranscriptionEngine {
     }
 
     static func languageName(_ locale: Locale) -> String {
-        Locale.current.localizedString(forIdentifier: locale.identifier) ?? locale.identifier
+        LanguageCatalog.name(locale)
     }
 
     /// The locale the engine will actually use for `locale`, if it supports it at all.
