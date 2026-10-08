@@ -11,6 +11,7 @@ struct DocumentView: View {
     @State private var dropTargeted = false
     @Environment(\.undoManager) private var undoManager
     @Environment(\.newDocument) private var newDocument
+    @Environment(\.openSettings) private var openSettings
 
     private var settings: AppSettings { AppSettings.shared }
     private var pending: PendingMedia { PendingMedia.shared }
@@ -37,7 +38,12 @@ struct DocumentView: View {
                     player.unload()
                 }
             }
-            .onAppear { adoptPendingMediaIfEmpty() }
+            .onAppear {
+                adoptPendingMediaIfEmpty()
+                #if DEBUG
+                if CommandLine.arguments.contains("-OpenSettings") { openSettings() }
+                #endif
+            }
             .onChange(of: pending.urls.count) { adoptPendingMediaIfEmpty() }
             .onChange(of: document.hasMedia, initial: true) { _, hasMedia in
                 if hasMedia {

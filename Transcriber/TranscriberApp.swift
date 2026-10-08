@@ -27,6 +27,7 @@ struct TranscriberApp: App {
             SettingsView()
                 .environment(updater)
         }
+        .windowResizability(.contentSize)
     }
 }
 
@@ -43,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if LoginItem.launchEventIsLoginItem { launchedAtLogin = true }
+
         if launchedAtLogin {
             // Started by the system at login to watch folders: stay out of the way.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
