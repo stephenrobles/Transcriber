@@ -23,8 +23,15 @@ enum WatchProcessor {
         var first: URL?
 
         for format in ExportFormat.allCases where settings.watchFormats.contains(format.rawValue) {
-            let text = TranscriptExporter.export(cues, as: format, title: title, cueSettings: cueSettings, paragraphGap: settings.paragraphGap)
-            let target = uniqueURL(base: base, ext: format.fileExtension)
+            let text: String
+            if format.isGenerated {
+                let transcript = TranscriptExporter.plainText(cues, paragraphGap: settings.paragraphGap)
+                text = try await SoapNoteGenerator.generate(transcript: transcript, title: title)
+            } else {
+                text = TranscriptExporter.export(cues, as: format, title: title, cueSettings: cueSettings, paragraphGap: settings.paragraphGap)
+            }
+            let target = uniqueURL(base: format.fileSuffix.isEmpty ? base : base.deletingLastPathComponent().appendingPathComponent(base.lastPathComponent + format.fileSuffix),
+                                   ext: format.fileExtension)
             try text.write(to: target, atomically: true, encoding: .utf8)
             first = first ?? target
         }

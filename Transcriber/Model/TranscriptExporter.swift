@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated enum ExportFormat: String, CaseIterable, Identifiable, Sendable {
-    case srt, vtt, text, timestampedText, markdown
+    case srt, vtt, text, timestampedText, markdown, soap
 
     var id: String { rawValue }
 
@@ -12,7 +12,18 @@ nonisolated enum ExportFormat: String, CaseIterable, Identifiable, Sendable {
         case .text: "Plain Text"
         case .timestampedText: "Text with Timestamps"
         case .markdown: "Markdown"
+        case .soap: "SOAP Note (Markdown)"
         }
+    }
+
+    /// Added to the media's name so the note doesn't collide with the Markdown transcript.
+    var fileSuffix: String {
+        self == .soap ? " SOAP" : ""
+    }
+
+    /// Written by Apple's on-device model rather than converted from the cues.
+    var isGenerated: Bool {
+        self == .soap
     }
 
     var fileExtension: String {
@@ -20,7 +31,7 @@ nonisolated enum ExportFormat: String, CaseIterable, Identifiable, Sendable {
         case .srt: "srt"
         case .vtt: "vtt"
         case .text, .timestampedText: "txt"
-        case .markdown: "md"
+        case .markdown, .soap: "md"
         }
     }
 }
@@ -33,6 +44,7 @@ nonisolated enum TranscriptExporter {
         case .text: plainText(cues, paragraphGap: paragraphGap)
         case .timestampedText: timestampedText(cues, paragraphGap: paragraphGap)
         case .markdown: markdown(cues, title: title, paragraphGap: paragraphGap)
+        case .soap: plainText(cues, paragraphGap: paragraphGap) // the generator's input; see SoapNoteGenerator
         }
     }
 

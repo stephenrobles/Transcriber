@@ -18,8 +18,12 @@ and export subtitles.
   the current cue is highlighted and followed during playback (View › Follow Playback).
   ⌥Space plays/pauses, ⌥⌘← / ⌥⌘→ skip 5 s, ⌘J jumps to the current cue.
 - Export (File › Export, ⌘E for SRT): `.srt`, `.vtt`, plain `.txt`, `.txt` with a
-  `[m:ss]` timestamp per paragraph, and `.md` (a heading with the file name, then paragraphs
-  with bold timestamps). Cue text is wrapped to the line limits at export time;
+  `[m:ss]` timestamp per paragraph, `.md` (a heading with the file name, then paragraphs
+  with bold timestamps), and **SOAP Note (Markdown)**: a medical SOAP note (summary, Subjective,
+  Objective, Assessment, Plan, patient discharge summary) written from the transcript by Apple's
+  on-device Foundation Model (`SoapNoteGenerator`; needs Apple Intelligence). Long transcripts
+  are condensed part by part first because the model's context window is small. Also available
+  as a watched-folder output. Cue text is wrapped to the line limits at export time;
   a newline typed in a cue forces a line break.
 - Projects save as `.transcriber` files (JSON: words, cues, settings and a bookmark + path to
   the media). If the media moved, the window offers Locate…; editing and export work without it.
