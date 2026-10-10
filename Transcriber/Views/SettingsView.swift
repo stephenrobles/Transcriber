@@ -19,7 +19,7 @@ struct SettingsView: View {
                 Form {
                     Section("Transcription") {
                         LanguagePicker(selection: $settings.localeIdentifier)
-                        Text("Speech is recognized on this Mac with Apple's on-device engine; nothing leaves your computer. A language's model downloads the first time you use it. The language can also be changed in the window before each transcription.")
+                        Text("Speech is recognized on this Mac with Apple's on-device engine; nothing leaves your computer. A language's model downloads the first time you use it. The language can also be changed in the window before each transcription. Languages marked “dictation model” use Apple's earlier on-device dictation engine, which covers more languages at lower accuracy.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

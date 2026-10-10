@@ -11,6 +11,8 @@ final class LanguageCatalog {
 
     private(set) var supported: [Locale] = []
     private(set) var installedIdentifiers: Set<String> = []
+    /// Languages the new engine lacks but Apple's earlier on-device dictation model covers (Swedish, Dutch, …).
+    private(set) var dictationOnlyIdentifiers: Set<String> = []
     private(set) var isLoaded = false
     @ObservationIgnored private var loading: Task<Void, Never>?
 
@@ -18,9 +20,18 @@ final class LanguageCatalog {
     func load() {
         guard loading == nil else { return }
         loading = Task {
-            let supported = await SpeechTranscriber.supportedLocales
-            let installed = await SpeechTranscriber.installedLocales
-            self.supported = supported.sorted { Self.name($0) < Self.name($1) }
+            let speech = await SpeechTranscriber.supportedLocales
+            let dictation = await DictationTranscriber.supportedLocales
+            var byIdentifier: [String: Locale] = [:]
+            for locale in speech { byIdentifier[locale.identifier] = locale }
+            var dictationOnly: Set<String> = []
+            for locale in dictation where byIdentifier[locale.identifier] == nil {
+                byIdentifier[locale.identifier] = locale
+                dictationOnly.insert(locale.identifier)
+            }
+            supported = byIdentifier.values.sorted { Self.name($0) < Self.name($1) }
+            dictationOnlyIdentifiers = dictationOnly
+            let installed = await SpeechTranscriber.installedLocales + DictationTranscriber.installedLocales
             installedIdentifiers = Set(installed.map(\.identifier))
             isLoaded = true
             await validateDefault()
@@ -33,11 +44,19 @@ final class LanguageCatalog {
         let settings = AppSettings.shared
         let current = settings.localeIdentifier
         guard !supported.contains(where: { $0.identifier == current }) else { return }
-        if let equivalent = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: Self.normalized(current))) {
+        let normalized = Locale(identifier: Self.normalized(current))
+        var equivalent = await SpeechTranscriber.supportedLocale(equivalentTo: normalized)
+        if equivalent == nil { equivalent = await DictationTranscriber.supportedLocale(equivalentTo: normalized) }
+        if let equivalent {
             settings.localeIdentifier = equivalent.identifier
         } else if let english = supported.first(where: { $0.identifier == "en_US" }) ?? supported.first {
             settings.localeIdentifier = english.identifier
         }
+    }
+
+    /// The menu title: the name, plus a note for languages that go through the dictation model.
+    func menuTitle(_ locale: Locale) -> String {
+        dictationOnlyIdentifiers.contains(locale.identifier) ? Self.name(locale) + " (dictation model)" : Self.name(locale)
     }
 
     /// "English (United States)", built from the language and region so that variant identifiers

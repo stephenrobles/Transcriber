@@ -14,7 +14,7 @@ struct LanguagePicker: View {
                 Text(LanguageCatalog.name(Locale(identifier: selection))).tag(selection)
             }
             ForEach(catalog.supported, id: \.identifier) { locale in
-                Text(LanguageCatalog.name(locale)).tag(locale.identifier)
+                Text(catalog.menuTitle(locale)).tag(locale.identifier)
             }
         }
         .onAppear { catalog.load() }

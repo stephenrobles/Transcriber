@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreMedia
 import Foundation
 import Speech
 
@@ -37,7 +38,8 @@ nonisolated enum TranscriptionEngine {
 
     /// The locale the engine will actually use for `locale`, if it supports it at all.
     static func supportedLocale(for locale: Locale) async -> Locale? {
-        await SpeechTranscriber.supportedLocale(equivalentTo: locale)
+        if let speech = await SpeechTranscriber.supportedLocale(equivalentTo: locale) { return speech }
+        return await DictationTranscriber.supportedLocale(equivalentTo: locale)
     }
 
     private static func run(url: URL, locale: Locale, emit: @escaping @Sendable (TranscriptionEvent) -> Void) async throws {
@@ -45,37 +47,39 @@ nonisolated enum TranscriptionEngine {
         let asset = AVURLAsset(url: url)
         let duration = try await asset.load(.duration).seconds
 
-        guard let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
+        guard let (transcriber, resolvedLocale) = await makeTranscriber(for: locale, maskProfanity: false) else {
             throw TranscriptionError.unsupportedLanguage(languageName(locale))
         }
-        let transcriber = SpeechTranscriber(locale: resolvedLocale,
-                                            transcriptionOptions: [],
-                                            reportingOptions: [.volatileResults],
-                                            attributeOptions: [.audioTimeRange])
 
-        try await ensureAssets(for: transcriber, locale: resolvedLocale, emit: emit)
+        try await ensureAssets(for: transcriber.module, locale: resolvedLocale, emit: emit)
         try Task.checkCancellation()
 
         emit(.status("Preparing…"))
-        let analyzer = SpeechAnalyzer(modules: [transcriber])
-        guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
+        let analyzer = SpeechAnalyzer(modules: [transcriber.module])
+        guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber.module]) else {
             throw TranscriptionError.noAudioFormat
         }
         let reader = try await MediaAudioReader(asset: asset, targetFormat: format)
         let input = AnalyzerInputSequence(reader: reader, onBufferRead: nil)
 
         emit(.status("Transcribing…"))
-        let results = Task.detached(priority: .userInitiated) {
-            for try await result in transcriber.results {
-                if result.isFinal {
-                    emit(.words(words(from: result.text)))
-                    emit(.volatile(""))
-                    if duration > 0 {
-                        emit(.progress(min(1, max(0, result.range.end.seconds / duration))))
-                    }
-                } else {
-                    emit(.volatile(String(result.text.characters)))
+        let handle: @Sendable (AttributedString, Bool, CMTimeRange) -> Void = { text, isFinal, range in
+            if isFinal {
+                emit(.words(words(from: text)))
+                emit(.volatile(""))
+                if duration > 0 {
+                    emit(.progress(min(1, max(0, range.end.seconds / duration))))
                 }
+            } else {
+                emit(.volatile(String(text.characters)))
+            }
+        }
+        let results = Task.detached(priority: .userInitiated) {
+            switch transcriber {
+            case .speech(let module):
+                for try await result in module.results { handle(result.text, result.isFinal, result.range) }
+            case .dictation(let module):
+                for try await result in module.results { handle(result.text, result.isFinal, result.range) }
             }
         }
 
@@ -94,7 +98,42 @@ nonisolated enum TranscriptionEngine {
         emit(.progress(1))
     }
 
-    private static func ensureAssets(for transcriber: SpeechTranscriber, locale: Locale, emit: @escaping @Sendable (TranscriptionEvent) -> Void) async throws {
+    /// Apple's new engine when it knows the language; otherwise the earlier on-device dictation
+    /// model, which covers more languages (Swedish, Dutch, Norwegian, …) at lower accuracy.
+    enum Transcriber {
+        case speech(SpeechTranscriber)
+        case dictation(DictationTranscriber)
+
+        var module: any SpeechModule {
+            switch self {
+            case .speech(let module): module
+            case .dictation(let module): module
+            }
+        }
+    }
+
+    static func makeTranscriber(for locale: Locale, maskProfanity: Bool) async -> (Transcriber, Locale)? {
+        if let resolved = await SpeechTranscriber.supportedLocale(equivalentTo: locale) {
+            let module = SpeechTranscriber(locale: resolved,
+                                           transcriptionOptions: maskProfanity ? [.etiquetteReplacements] : [],
+                                           reportingOptions: [.volatileResults],
+                                           attributeOptions: [.audioTimeRange])
+            return (.speech(module), resolved)
+        }
+        if let resolved = await DictationTranscriber.supportedLocale(equivalentTo: locale) {
+            var options: Set<DictationTranscriber.TranscriptionOption> = [.punctuation]
+            if maskProfanity { options.insert(.etiquetteReplacements) }
+            let module = DictationTranscriber(locale: resolved,
+                                              contentHints: [],
+                                              transcriptionOptions: options,
+                                              reportingOptions: [.volatileResults],
+                                              attributeOptions: [.audioTimeRange])
+            return (.dictation(module), resolved)
+        }
+        return nil
+    }
+
+    private static func ensureAssets(for transcriber: any SpeechModule, locale: Locale, emit: @escaping @Sendable (TranscriptionEvent) -> Void) async throws {
         let status = await AssetInventory.status(forModules: [transcriber])
         switch status {
         case .installed:
