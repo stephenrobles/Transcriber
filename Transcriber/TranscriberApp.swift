@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 @main
 struct TranscriberApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var updater = AppUpdater()
 
     init() {
         // A new window with the drop zone is the whole point; skip the Open panel macOS would show at launch.
@@ -15,17 +14,15 @@ struct TranscriberApp: App {
     var body: some Scene {
         DocumentGroup(newDocument: { TranscriptDocument() }) { configuration in
             DocumentView(document: configuration.document)
-                .environment(updater)
                 .frame(minWidth: 720, minHeight: 480)
         }
         .defaultSize(width: 1000, height: 740)
         .commands {
-            AppCommands(updater: updater)
+            AppCommands()
         }
 
         Settings {
             SettingsView()
-                .environment(updater)
         }
         .windowResizability(.contentSize)
     }

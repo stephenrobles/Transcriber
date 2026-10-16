@@ -8,6 +8,8 @@ nonisolated struct WatchedFolder: Codable, Identifiable, Hashable, Sendable {
     var path: String
     var isEnabled = true
     var addedAt = Date()
+    /// Security-scoped bookmark so a sandboxed build can keep reading the folder after relaunch.
+    var bookmark: Data?
 
     var url: URL { URL(fileURLWithPath: path) }
     var displayName: String { (path as NSString).lastPathComponent }
@@ -62,6 +64,8 @@ final class FolderWatcher {
     @ObservationIgnored private var queue: [URL] = []
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var worker: Task<Void, Never>?
+    /// Live sandbox access to each enabled folder, by folder id.
+    @ObservationIgnored private var access: [UUID: ScopedAccess] = [:]
 
     private let defaults = UserDefaults.standard
     private static let foldersKey = "watchedFolders"
@@ -78,6 +82,14 @@ final class FolderWatcher {
         if let saved = defaults.dictionary(forKey: Self.processedKey) as? [String: Date] {
             processed = saved
         }
+        for folder in folders where folder.isEnabled {
+            if let bookmark = folder.bookmark, let scoped = ScopedAccess.resolve(bookmark) { access[folder.id] = scoped }
+        }
+    }
+
+    /// The folder's URL with sandbox access started, or its plain URL outside the sandbox.
+    private func readableURL(for folder: WatchedFolder) -> URL {
+        access[folder.id]?.url ?? folder.url
     }
 
     /// Call once at launch. `process` returns the file worth showing the user when it is done.
@@ -94,29 +106,34 @@ final class FolderWatcher {
     func add(_ url: URL) {
         let path = url.standardizedFileURL.path
         guard !folders.contains(where: { $0.path == path }) else { return }
+        let folder = WatchedFolder(path: path, bookmark: ScopedAccess.bookmark(for: url))
+        access[folder.id] = ScopedAccess(url: url)
         // Everything already in the folder is the user's business; only new arrivals get processed.
         for file in contents(of: url) {
             processed[file.standardizedFileURL.path] = Date()
         }
         persistProcessed()
-        folders.append(WatchedFolder(path: path))
+        folders.append(folder)
         updateTimer()
     }
 
     func remove(_ id: UUID) {
         folders.removeAll { $0.id == id }
+        access[id] = nil
         updateTimer()
     }
 
     func setEnabled(_ id: UUID, _ enabled: Bool) {
         guard let index = folders.firstIndex(where: { $0.id == id }) else { return }
         if enabled, !folders[index].isEnabled {
+            if access[id] == nil, let bookmark = folders[index].bookmark { access[id] = ScopedAccess.resolve(bookmark) }
             // Re-enabling starts fresh: what accumulated while it was off is not a backlog to churn through.
-            for file in contents(of: folders[index].url) {
+            for file in contents(of: readableURL(for: folders[index])) {
                 processed[file.standardizedFileURL.path] = Date()
             }
             persistProcessed()
         }
+        if !enabled { access[id] = nil }
         folders[index].isEnabled = enabled
         updateTimer()
     }
@@ -154,7 +171,7 @@ final class FolderWatcher {
         let now = Date()
         var seen: Set<String> = []
         for folder in folders where folder.isEnabled {
-            for url in contents(of: folder.url) {
+            for url in contents(of: readableURL(for: folder)) {
                 let path = url.standardizedFileURL.path
                 guard processed[path] == nil, !queue.contains(where: { $0.path == path }) else { continue }
                 seen.insert(path)

@@ -24,7 +24,6 @@ extension FocusedValues {
 }
 
 struct AppCommands: Commands {
-    let updater: AppUpdater
     @FocusedValue(\.documentContext) private var context
     @Environment(\.newDocument) private var newDocument
 
@@ -34,11 +33,6 @@ struct AppCommands: Commands {
     private var canEdit: Bool { hasTranscript && !(context?.document.isTranscribing ?? false) }
 
     var body: some Commands {
-        CommandGroup(after: .appInfo) {
-            Button("Check for Updates…") { updater.checkForUpdates() }
-                .disabled(!updater.canCheckForUpdates)
-        }
-
         CommandGroup(after: .newItem) {
             Button("Open Media…") { openMedia() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
@@ -210,19 +204,12 @@ enum ExportPanel {
     @MainActor
     static func run(document: TranscriptDocument, format: ExportFormat) {
         let settings = AppSettings.shared
-        if format.isGenerated, let problem = SoapNoteGenerator.availabilityProblem() {
-            let alert = NSAlert()
-            alert.messageText = "Can't write a SOAP note"
-            alert.informativeText = problem
-            alert.runModal()
-            return
-        }
         let panel = NSSavePanel()
         if let type = UTType(filenameExtension: format.fileExtension) {
             panel.allowedContentTypes = [type]
         }
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = document.suggestedBaseName + format.fileSuffix + "." + format.fileExtension
+        panel.nameFieldStringValue = document.suggestedBaseName + "." + format.fileExtension
         panel.directoryURL = document.mediaURL?.deletingLastPathComponent()
         panel.title = "Export \(format.title)"
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -230,24 +217,6 @@ enum ExportPanel {
         let cues = document.cues
         let cueSettings = document.cueSettings
         let paragraphGap = settings.paragraphGap
-        if format.isGenerated {
-            let transcript = TranscriptExporter.plainText(cues, paragraphGap: paragraphGap)
-            GenerationProgressSheet.run(title: "Writing SOAP note…") { status in
-                try await SoapNoteGenerator.generate(transcript: transcript, title: title, status: status)
-            } completion: { result in
-                switch result {
-                case .success(let note):
-                    do { try note.write(to: url, atomically: true, encoding: .utf8) } catch { NSAlert(error: error).runModal() }
-                case .failure(let error):
-                    if error is CancellationError { return }
-                    let alert = NSAlert()
-                    alert.messageText = "Couldn't write the SOAP note"
-                    alert.informativeText = error.localizedDescription
-                    alert.runModal()
-                }
-            }
-            return
-        }
         let text = TranscriptExporter.export(cues, as: format, title: title, cueSettings: cueSettings, paragraphGap: paragraphGap)
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)

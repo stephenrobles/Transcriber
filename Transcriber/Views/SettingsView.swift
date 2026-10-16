@@ -3,7 +3,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable private var settings = AppSettings.shared
-    @Environment(AppUpdater.self) private var updater
 
     /// Tall enough to show a tab without scrolling on a big display, never taller than the screen;
     /// the form scrolls inside it on small ones.
@@ -23,7 +22,6 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        @Bindable var updater = updater
         TabView(selection: $selectedTab) {
             Tab("General", systemImage: "gearshape", value: "General") {
                 Form {
@@ -45,16 +43,6 @@ struct SettingsView: View {
                         Text("Applies to the Text view and to .txt exports.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-                    Section("Updates") {
-                        Toggle("Check for updates automatically", isOn: $updater.automaticallyChecksForUpdates)
-                        HStack {
-                            Button("Check Now…") { updater.checkForUpdates() }
-                                .disabled(!updater.canCheckForUpdates)
-                            Spacer()
-                            Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
-                                .foregroundStyle(.secondary)
-                        }
                     }
                 }
                 .formStyle(.grouped)

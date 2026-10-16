@@ -63,11 +63,5 @@
 	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Transcriber turns the speech in your audio and video files into text, entirely on this Mac.</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUFeedURL</key>
-	<string>https://beardfm.app/transcriber/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>oPza5p29OAvUI+7ovzEb6AQsxN/cTWzti3FL/35+i7o=</string>
 </dict>
 </plist>

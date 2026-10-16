@@ -1,4 +1,7 @@
-# Transcriber
+# Transcriber (App Store branch)
+
+This branch is the Mac App Store build: sandboxed, no Sparkle, and without the SOAP note
+export. The `main` branch is the direct-download build served from beardfm.app.
 
 A Mac app that turns a video or audio file into a transcript with Apple's on-device speech
 engine (the `SpeechAnalyzer` / `SpeechTranscriber` API in macOS 26), then lets you fix it up
@@ -19,12 +22,8 @@ and export subtitles.
   the current cue is highlighted and followed during playback (View › Follow Playback).
   ⌥Space plays/pauses, ⌥⌘← / ⌥⌘→ skip 5 s, ⌘J jumps to the current cue.
 - Export (File › Export, ⌘E for SRT): `.srt`, `.vtt`, plain `.txt`, `.txt` with a
-  `[m:ss]` timestamp per paragraph, `.md` (a heading with the file name, then paragraphs
-  with bold timestamps), and **SOAP Note (Markdown)**: a medical SOAP note (summary, Subjective,
-  Objective, Assessment, Plan, patient discharge summary) written from the transcript by Apple's
-  on-device Foundation Model (`SoapNoteGenerator`; needs Apple Intelligence). Long transcripts
-  are condensed part by part first because the model's context window is small. Also available
-  as a watched-folder output. Cue text is wrapped to the line limits at export time;
+  `[m:ss]` timestamp per paragraph, and `.md` (a heading with the file name, then paragraphs
+  with bold timestamps). Cue text is wrapped to the line limits at export time;
   a newline typed in a cue forces a line break.
 - Projects save as `.transcriber` files (JSON: words, cues, settings and a bookmark + path to
   the media). If the media moved, the window offers Locate…; editing and export work without it.
@@ -55,21 +54,13 @@ and export subtitles.
   with a small `main.swift` that iterates `TranscriptionEngine.transcribe(url:locale:)`
   (`say -o speech.aiff "…"` makes a quick test clip).
 
-## Releases and updates
+## Sandbox notes
 
-Updates ship through Sparkle (SPM, 2.6+). The feed is
-`https://beardfm.app/transcriber/appcast.xml`, kept in the beardfm.app site repo at
-`site/static/transcriber/appcast.xml`; DMGs live at
-`site/static/downloads/Transcriber-<version>.dmg` (plus `Transcriber.dmg` for the
-always-latest link). The EdDSA signing key is in the login keychain under the Sparkle account
-`transcriber`; its public key is `SUPublicEDKey` in `Info.plist`.
-
-1. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (Sparkle compares the latter) and
-   optionally write `release-notes/<version>.html`.
-2. `Tools/release.sh` builds, signs and packages `dist/Transcriber <version>.dmg`.
-   Add `--notarize` to notarize, and `--notarize --upload` to also sign the update, copy it into
-   beardfm.app, add it to the appcast and deploy the site. Commit the beardfm.app changes afterwards.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+- Entitlements: app sandbox, user-selected files read/write, app-scoped bookmarks.
+- `ScopedAccess` wraps `startAccessingSecurityScopedResource` for the lifetime of an object.
+  A project's media is saved as a security-scoped bookmark and re-opened through it; the
+  "Locate…" button re-grants access through the open panel.
+- Watched folders keep a security-scoped bookmark each, resolved at launch and while enabled,
+  which also covers writing transcripts next to the files inside them.
+- Exports go through the save panel. `PrivacyInfo.xcprivacy` declares the UserDefaults API use.
+- Stephen archives and uploads to App Store Connect himself.

@@ -63,11 +63,6 @@ struct WatchedFoldersSettings: View {
                     }))
             }
             Toggle("Also save a .transcriber project", isOn: $settings.watchSavesProject)
-            if settings.watchFormats.contains(ExportFormat.soap.rawValue), let problem = SoapNoteGenerator.availabilityProblem() {
-                Text(problem)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
             if settings.watchFormats.isEmpty, !settings.watchSavesProject {
                 Text("Nothing is selected, so watched files will be transcribed and then discarded.")
                     .font(.caption)

@@ -17,6 +17,8 @@ final class TranscriptDocument: ReferenceFileDocument, ObservableObject {
     nonisolated static var writableContentTypes: [UTType] { [.transcriberProject] }
 
     var mediaURL: URL?
+    /// Holds the sandbox's permission to read the media while the document is open.
+    @ObservationIgnored private var mediaAccess: ScopedAccess?
     var mediaFileName: String?
     var mediaDuration: TimeInterval = 0
     var transcript: Transcript?
@@ -30,6 +32,7 @@ final class TranscriptDocument: ReferenceFileDocument, ObservableObject {
     init() {}
 
     init(mediaURL: URL) {
+        mediaAccess = ScopedAccess(url: mediaURL)
         self.mediaURL = mediaURL
         mediaFileName = mediaURL.lastPathComponent
     }
@@ -46,23 +49,15 @@ final class TranscriptDocument: ReferenceFileDocument, ObservableObject {
         transcript = file.transcript
         cueSettings = file.cueSettings
 
-        var resolved: URL?
-        if let bookmark = file.mediaBookmark {
-            var stale = false
-            if let url = try? URL(resolvingBookmarkData: bookmark, options: [.withoutUI], bookmarkDataIsStale: &stale),
-               FileManager.default.fileExists(atPath: url.path) {
-                resolved = url
-            }
-        }
-        if resolved == nil, let path = file.mediaPath, FileManager.default.fileExists(atPath: path) {
-            resolved = URL(fileURLWithPath: path)
-        }
-        mediaURL = resolved
-        mediaMissing = resolved == nil && (file.mediaBookmark != nil || file.mediaPath != nil)
+        // Only the security-scoped bookmark can restore access inside the sandbox; the saved path is informational.
+        let access = file.mediaBookmark.flatMap(ScopedAccess.resolve)
+        mediaAccess = access
+        mediaURL = access?.url
+        mediaMissing = access == nil && (file.mediaBookmark != nil || file.mediaPath != nil)
     }
 
     func snapshot(contentType: UTType) throws -> ProjectFile {
-        ProjectFile(mediaBookmark: try? mediaURL?.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil),
+        ProjectFile(mediaBookmark: mediaURL.flatMap(ScopedAccess.bookmark),
                     mediaPath: mediaURL?.path,
                     mediaFileName: mediaFileName,
                     mediaDuration: mediaDuration,
@@ -94,6 +89,7 @@ final class TranscriptDocument: ReferenceFileDocument, ObservableObject {
 
     func attachMedia(_ url: URL, undoManager: UndoManager?) {
         let previous = mediaURL
+        mediaAccess = ScopedAccess(url: url)
         mediaURL = url
         mediaFileName = url.lastPathComponent
         mediaMissing = false
@@ -112,6 +108,7 @@ final class TranscriptDocument: ReferenceFileDocument, ObservableObject {
         let previous = mediaURL
         cancelTranscription()
         mediaURL = nil
+        mediaAccess = nil
         mediaFileName = nil
         mediaMissing = false
         if let previous {
@@ -123,6 +120,7 @@ final class TranscriptDocument: ReferenceFileDocument, ObservableObject {
     }
 
     func relinkMedia(_ url: URL) {
+        mediaAccess = ScopedAccess(url: url)
         mediaURL = url
         mediaFileName = url.lastPathComponent
         mediaMissing = false
