@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import Observation
 
@@ -259,3 +260,4 @@ final class FolderWatcher {
         defaults.set(processed, forKey: Self.processedKey)
     }
 }
+#endif

@@ -79,7 +79,7 @@ struct PlayerView: View {
                     Text(rateTitle(player.rate))
                         .monospacedDigit()
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenu()
                 .fixedSize()
                 .help("Playback speed")
             }

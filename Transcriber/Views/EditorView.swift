@@ -5,6 +5,8 @@ struct EditorView: View {
     let document: TranscriptDocument
     @Bindable var state: EditorState
     let player: PlayerController
+    let onExport: (ExportFormat) -> Void
+    let onRelink: () -> Void
     @Environment(\.undoManager) private var undoManager
     @State private var pendingLanguage: String?
 
@@ -16,7 +18,7 @@ struct EditorView: View {
                 PlayerView(player: player, caption: currentCaption)
                 Divider()
             } else if document.mediaMissing {
-                MissingMediaBanner(document: document)
+                MissingMediaBanner(document: document, onLocate: onRelink)
                 Divider()
             }
             if state.findVisible {
@@ -32,13 +34,26 @@ struct EditorView: View {
             Divider()
             statusBar
         }
+        .platformToolbarStyle()
         .toolbar {
+            #if os(macOS)
             ToolbarItem(placement: .principal) {
                 tabButton(.cues)
             }
             ToolbarItem(placement: .principal) {
                 tabButton(.text)
             }
+            #else
+            ToolbarItem(placement: .principal) {
+                Picker("View", selection: $state.tab) {
+                    ForEach(EditorState.Tab.allCases) { tab in
+                        Text(tab.title).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 150)
+            }
+            #endif
             ToolbarItemGroup {
                 Button {
                     if state.findVisible { state.hideFind() } else { state.showFind() }
@@ -48,7 +63,7 @@ struct EditorView: View {
                 .help("Find & Replace (⌘F)")
                 Menu {
                     ForEach(ExportFormat.allCases) { format in
-                        Button("\(format.title)…") { ExportPanel.run(document: document, format: format) }
+                        Button("\(format.title)…") { onExport(format) }
                     }
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
@@ -93,7 +108,7 @@ struct EditorView: View {
         } label: {
             Text(LanguageCatalog.name(Locale(identifier: current)))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .fixedSize()
         .help("Spoken language. Choosing another transcribes the file again.")
         .onAppear { LanguageCatalog.shared.load() }
@@ -123,10 +138,12 @@ struct EditorView: View {
                 Text(TimeFormat.clock(player.duration))
             }
             Spacer()
+            #if os(macOS)
             if state.tab == .cues {
                 Text("Click a cue's text to edit it. ⌘↩ splits at the cursor.")
                     .foregroundStyle(.tertiary)
             }
+            #endif
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -139,6 +156,7 @@ struct EditorView: View {
 
 struct MissingMediaBanner: View {
     let document: TranscriptDocument
+    let onLocate: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -147,16 +165,35 @@ struct MissingMediaBanner: View {
             Text("The media file \"\(document.mediaFileName ?? "")\" wasn't found, so playback is off. Editing and export still work.")
                 .lineLimit(2)
             Spacer()
-            Button("Locate…") {
-                let panel = NSOpenPanel()
-                panel.allowedContentTypes = PendingMedia.acceptedTypes
-                panel.message = "Find \(document.mediaFileName ?? "the media file")."
-                if panel.runModal() == .OK, let url = panel.url { document.relinkMedia(url) }
-            }
+            Button("Locate…", action: onLocate)
         }
         .font(.callout)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(.yellow.opacity(0.08))
+    }
+}
+
+extension View {
+    /// A menu that looks like plain text with a chevron on the Mac; the default elsewhere.
+    @ViewBuilder
+    func borderlessMenu() -> some View {
+        #if os(macOS)
+        menuStyle(.borderlessButton)
+        #else
+        self
+        #endif
+    }
+}
+
+private extension View {
+    /// On iPhone and iPad the bar gets a solid background so the video starts below it.
+    @ViewBuilder
+    func platformToolbarStyle() -> some View {
+        #if os(iOS)
+        self.toolbarBackground(.visible, for: .navigationBar)
+        #else
+        self
+        #endif
     }
 }

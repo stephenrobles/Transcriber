@@ -49,7 +49,7 @@ struct TranscribingView: View {
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("end", anchor: .bottom) }
                 }
             }
-            .background(Color(nsColor: .textBackgroundColor))
+            .background(Color.textBackground)
         }
     }
 

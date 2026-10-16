@@ -22,6 +22,9 @@ final class PlayerController {
     @ObservationIgnored private var endObserver: NSObjectProtocol?
 
     init() {
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        #endif
         player.actionAtItemEnd = .pause
         statusCancellable = player.publisher(for: \.timeControlStatus)
             .receive(on: DispatchQueue.main)

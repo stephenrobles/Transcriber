@@ -10,7 +10,7 @@ nonisolated enum TranscriptionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noAudioTrack: "This file has no audio track to transcribe."
-        case .unsupportedLanguage(let name): "On-device transcription isn't available for \(name) on this Mac."
+        case .unsupportedLanguage(let name): "On-device transcription isn't available for \(name) on this device."
         case .noAudioFormat: "The speech engine didn't offer an audio format it can analyze."
         case .readerFailed(let reason): "The audio couldn't be read: \(reason)"
         }

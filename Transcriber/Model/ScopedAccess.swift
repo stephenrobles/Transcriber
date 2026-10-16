@@ -18,13 +18,23 @@ nonisolated final class ScopedAccess: Sendable {
 
     /// A bookmark that restores access in a later launch, if the file is reachable now.
     static func bookmark(for url: URL) -> Data? {
+        #if os(macOS)
         try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+        #else
+        // iOS bookmarks to user-picked files carry their security scope implicitly.
+        try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+        #endif
     }
 
     /// Resolves a bookmark and starts accessing it; nil when the file is gone or access was refused.
     static func resolve(_ bookmark: Data) -> ScopedAccess? {
         var stale = false
-        guard let url = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutUI], bookmarkDataIsStale: &stale),
+        #if os(macOS)
+        let options: URL.BookmarkResolutionOptions = [.withSecurityScope, .withoutUI]
+        #else
+        let options: URL.BookmarkResolutionOptions = [.withoutUI]
+        #endif
+        guard let url = try? URL(resolvingBookmarkData: bookmark, options: options, bookmarkDataIsStale: &stale),
               FileManager.default.fileExists(atPath: url.path) else { return nil }
         return ScopedAccess(url: url)
     }

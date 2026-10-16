@@ -1,7 +1,15 @@
 # Transcriber (App Store branch)
 
-This branch is the Mac App Store build: sandboxed, no Sparkle, and without the SOAP note
-export. The `main` branch is the direct-download build served from beardfm.app.
+This branch is the App Store build: one target for Mac, iPhone and iPad, sandboxed, no
+Sparkle, and without the SOAP note export. The `main` branch is the direct-download Mac build
+served from beardfm.app.
+
+On iPhone and iPad the app opens in the system document browser: create a project, then
+choose a video or audio file from Files or a video from Photos (copied into the app's
+`Documents/Media` folder). Editing, playback with captions, Find & Replace and the five exports
+(through the share-style file exporter) are the same as on the Mac. Watched folders and Open
+at Login are Mac-only. Platform splits are `#if os(macOS)` / `#if os(iOS)` blocks; the engine,
+cue builder, exporters and project format have none.
 
 A Mac app that turns a video or audio file into a transcript with Apple's on-device speech
 engine (the `SpeechAnalyzer` / `SpeechTranscriber` API in macOS 26), then lets you fix it up
@@ -56,7 +64,8 @@ and export subtitles.
 
 ## Sandbox notes
 
-- Entitlements: app sandbox, user-selected files read/write, app-scoped bookmarks.
+- Entitlements (macOS SDK only): app sandbox, user-selected files read/write, app-scoped
+  bookmarks. iOS uses `Info-iOS.plist` (document browser, file sharing, project type only).
 - `ScopedAccess` wraps `startAccessingSecurityScopedResource` for the lifetime of an object.
   A project's media is saved as a security-scoped bookmark and re-opened through it; the
   "Locate…" button re-grants access through the open panel.

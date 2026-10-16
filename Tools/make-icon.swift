@@ -124,9 +124,44 @@ func render(size: Int) -> Data {
     return rep.representation(using: .png, properties: [:])!
 }
 
+/// iOS icon: the same artwork filling the whole square, no tile shadow, no transparency.
+func renderIOS(size: Int) -> Data {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let context = NSGraphicsContext(bitmapImageRep: rep)!.cgContext
+    context.scaleBy(x: CGFloat(size) / canvas, y: CGFloat(size) / canvas)
+    context.setShouldAntialias(true)
+    let square = CGPath(rect: CGRect(x: 0, y: 0, width: canvas, height: canvas), transform: nil)
+    fill(square, in: context, gradient: [color(0xA06CFF), color(0x7B45F2), color(0x4E22C0)], locations: [0, 0.55, 1],
+         from: CGPoint(x: 512, y: 1024), to: CGPoint(x: 512, y: 0))
+    let glow = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [color(0xD9C4FF, 0.42), color(0xD9C4FF, 0)] as CFArray, locations: [0, 1])!
+    context.drawRadialGradient(glow, startCenter: CGPoint(x: 512, y: 540), startRadius: 0, endCenter: CGPoint(x: 512, y: 540), endRadius: 520, options: [])
+    // The tile occupies 824 of 1024 on macOS; scale the glyph up to match that proportion.
+    context.saveGState()
+    context.translateBy(x: 512, y: 512)
+    context.scaleBy(x: 1024 / 824, y: 1024 / 824)
+    context.translateBy(x: -512, y: -512)
+    for path in glyphPaths() {
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: -8), blur: 20, color: color(0x24105E, 0.45))
+        context.addPath(path)
+        context.setFillColor(color(0xFFFFFF))
+        context.fillPath()
+        context.restoreGState()
+        fill(path, in: context, gradient: [color(0xFFFFFF), color(0xEDE4FF)], locations: [0, 1],
+             from: CGPoint(x: 512, y: 800), to: CGPoint(x: 512, y: 224))
+    }
+    context.restoreGState()
+    // Flatten to opaque RGB: iOS rejects icons with an alpha channel.
+    let opaque = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 32)!
+    let octx = NSGraphicsContext(bitmapImageRep: opaque)!.cgContext
+    octx.draw(rep.cgImage!, in: CGRect(x: 0, y: 0, width: size, height: size))
+    return opaque.representation(using: .png, properties: [:])!
+}
+
 let output = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? ".")
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
 for size in [16, 32, 64, 128, 256, 512, 1024] {
     try render(size: size).write(to: output.appending(path: "icon_\(size).png"))
 }
+try renderIOS(size: 1024).write(to: output.appending(path: "icon_ios_1024.png"))
 print("Wrote icons to \(output.path)")

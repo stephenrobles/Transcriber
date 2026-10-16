@@ -1,15 +1,21 @@
-import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
-/// Everything the menus need from the front document window.
+/// Everything the menus need from the front document. The document view supplies the actions
+/// that need a file dialog or a confirmation, so the menus stay the same on every platform.
 @MainActor
 struct DocumentContext {
     let document: TranscriptDocument
     let state: EditorState
     let player: PlayerController
     let undoManager: UndoManager?
-    let attachMedia: (URL) -> Void
+    let openMedia: () -> Void
+    let export: (ExportFormat) -> Void
+    let retranscribe: () -> Void
+    let rebuildCues: () -> Void
 }
 
 struct DocumentContextKey: FocusedValueKey {
@@ -25,7 +31,6 @@ extension FocusedValues {
 
 struct AppCommands: Commands {
     @FocusedValue(\.documentContext) private var context
-    @Environment(\.newDocument) private var newDocument
 
     private var settings: AppSettings { AppSettings.shared }
     private var hasTranscript: Bool { context?.document.hasTranscript ?? false }
@@ -34,14 +39,15 @@ struct AppCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("Open Media…") { openMedia() }
+            Button("Open Media…") { context?.openMedia() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
+                .disabled(context == nil)
         }
 
         CommandGroup(after: .saveItem) {
             Menu("Export") {
                 ForEach(ExportFormat.allCases) { format in
-                    Button("\(format.title)…") { export(format) }
+                    Button("\(format.title)…") { context?.export(format) }
                         .keyboardShortcut(format == .srt ? KeyboardShortcut("e") : nil)
                 }
             }
@@ -64,9 +70,9 @@ struct AppCommands: Commands {
         }
 
         CommandMenu("Transcript") {
-            Button("Transcribe Again…") { retranscribe() }
+            Button("Transcribe Again…") { context?.retranscribe() }
                 .disabled(!hasMedia || (context?.document.isTranscribing ?? false))
-            Button("Rebuild Cues from Settings…") { rebuildCues() }
+            Button("Rebuild Cues from Settings…") { context?.rebuildCues() }
                 .disabled(!canEdit)
             Divider()
             Button("Split Cue at Cursor") { splitCue() }
@@ -123,49 +129,6 @@ struct AppCommands: Commands {
 
     // MARK: - Actions
 
-    private func openMedia() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = PendingMedia.acceptedTypes
-        panel.message = "Choose a video or audio file to transcribe."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        if let context, !context.document.hasMedia {
-            context.attachMedia(url)
-        } else {
-            newDocument { TranscriptDocument(mediaURL: url) }
-        }
-    }
-
-    private func export(_ format: ExportFormat) {
-        guard let context else { return }
-        ExportPanel.run(document: context.document, format: format)
-    }
-
-    private func retranscribe() {
-        guard let context else { return }
-        if context.document.hasTranscript {
-            let alert = NSAlert()
-            alert.messageText = "Transcribe this file again?"
-            alert.informativeText = "The current transcript and any edits will be replaced. You can undo this."
-            alert.addButton(withTitle: "Transcribe Again")
-            alert.addButton(withTitle: "Cancel")
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
-        }
-        context.document.startTranscription(locale: settings.locale, cueSettings: settings.cueSettings, undoManager: context.undoManager)
-    }
-
-    private func rebuildCues() {
-        guard let context else { return }
-        let alert = NSAlert()
-        alert.messageText = "Rebuild cues from the subtitle settings?"
-        alert.informativeText = "Cues are regrouped from the original transcription using the limits in Settings. Text edits, splits and merges are discarded. You can undo this."
-        alert.addButton(withTitle: "Rebuild")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        context.document.rebuildCues(settings: settings.cueSettings, undoManager: context.undoManager)
-    }
-
     private func splitCue() {
         guard let context, let id = context.state.editingCueID, let offset = context.state.editingCursorOffset else { return }
         context.state.pendingSplit = (id, offset)
@@ -200,6 +163,7 @@ struct AppCommands: Commands {
     }
 }
 
+#if os(macOS)
 enum ExportPanel {
     @MainActor
     static func run(document: TranscriptDocument, format: ExportFormat) {
@@ -213,11 +177,8 @@ enum ExportPanel {
         panel.directoryURL = document.mediaURL?.deletingLastPathComponent()
         panel.title = "Export \(format.title)"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let title = document.suggestedBaseName
-        let cues = document.cues
-        let cueSettings = document.cueSettings
-        let paragraphGap = settings.paragraphGap
-        let text = TranscriptExporter.export(cues, as: format, title: title, cueSettings: cueSettings, paragraphGap: paragraphGap)
+        let text = TranscriptExporter.export(document.cues, as: format, title: document.suggestedBaseName,
+                                             cueSettings: document.cueSettings, paragraphGap: settings.paragraphGap)
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
         } catch {
@@ -225,3 +186,4 @@ enum ExportPanel {
         }
     }
 }
+#endif

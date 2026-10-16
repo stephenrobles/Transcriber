@@ -1,20 +1,49 @@
-import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#else
+import PhotosUI
+#endif
 
-/// Root view of a document window. Shows the drop zone, the live transcription, or the editor.
+/// Root view of a document. Shows the drop zone, the live transcription, or the editor, and owns
+/// the file dialogs and confirmations that the menus and toolbar trigger.
 struct DocumentView: View {
     let document: TranscriptDocument
     @State private var state = EditorState()
     @State private var player = PlayerController()
     @State private var viewID = UUID()
     @State private var dropTargeted = false
+    @State private var showFileImporter = false
+    @State private var importerRelinks = false
+    @State private var confirmation: Confirmation?
+    @State private var importError: String?
+    #if os(iOS)
+    @State private var photoSelection: PhotosPickerItem?
+    @State private var exportRequest: ExportRequest?
+    @State private var showSettings = false
+    #endif
     @Environment(\.undoManager) private var undoManager
+    #if os(macOS)
     @Environment(\.newDocument) private var newDocument
     @Environment(\.openSettings) private var openSettings
+    #endif
 
     private var settings: AppSettings { AppSettings.shared }
-    private var pending: PendingMedia { PendingMedia.shared }
+
+    private enum Confirmation: Identifiable {
+        case retranscribe, rebuildCues
+        var id: Self { self }
+    }
+
+    #if os(iOS)
+    private struct ExportRequest: Identifiable {
+        let format: ExportFormat
+        let file: ExportedTextFile
+        let name: String
+        var id: String { format.rawValue }
+    }
+    #endif
 
     var body: some View {
         content
@@ -29,8 +58,40 @@ struct DocumentView: View {
             .dropDestination(for: URL.self) { urls, _ in
                 handleDrop(urls)
             } isTargeted: { dropTargeted = $0 }
-            .focusedSceneValue(\.documentContext, DocumentContext(document: document, state: state, player: player,
-                                                                   undoManager: undoManager, attachMedia: attach))
+            .focusedSceneValue(\.documentContext, DocumentContext(
+                document: document, state: state, player: player, undoManager: undoManager,
+                openMedia: { importerRelinks = false; showFileImporter = true },
+                export: export,
+                retranscribe: { if document.hasTranscript { confirmation = .retranscribe } else { startTranscription() } },
+                rebuildCues: { confirmation = .rebuildCues }))
+            .fileImporter(isPresented: $showFileImporter, allowedContentTypes: PendingMedia.acceptedTypes, allowsMultipleSelection: false) { result in
+                guard case .success(let urls) = result, let url = urls.first else { return }
+                if importerRelinks || (document.mediaMissing && document.hasTranscript) {
+                    document.relinkMedia(url)
+                } else {
+                    openInNewOrHere(url)
+                }
+            }
+            .confirmationDialog(confirmationTitle, isPresented: Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }), titleVisibility: .visible) {
+                switch confirmation {
+                case .retranscribe:
+                    Button("Transcribe Again", role: .destructive) { startTranscription() }
+                case .rebuildCues:
+                    Button("Rebuild Cues", role: .destructive) { document.rebuildCues(settings: settings.cueSettings, undoManager: undoManager) }
+                case nil:
+                    EmptyView()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(confirmation == .rebuildCues
+                     ? "Cues are regrouped from the original transcription using the limits in Settings. Text edits, splits and merges are discarded. You can undo this."
+                     : "The current transcript and any edits will be replaced. You can undo this.")
+            }
+            .alert("Couldn't import the video", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+                Button("OK") { importError = nil }
+            } message: {
+                Text(importError ?? "")
+            }
             .task(id: document.mediaURL) {
                 if let url = document.mediaURL {
                     await player.load(url: url)
@@ -41,24 +102,8 @@ struct DocumentView: View {
                     player.unload()
                 }
             }
-            .onAppear {
-                adoptPendingMediaIfEmpty()
-                #if DEBUG
-                if CommandLine.arguments.contains("-OpenSettings") { openSettings() }
-                #endif
-            }
-            .onChange(of: pending.urls.count) { adoptPendingMediaIfEmpty() }
-            .onChange(of: document.hasMedia, initial: true) { _, hasMedia in
-                if hasMedia {
-                    pending.emptyDocumentIDs.remove(viewID)
-                } else {
-                    pending.emptyDocumentIDs.insert(viewID)
-                }
-            }
-            .onDisappear {
-                pending.emptyDocumentIDs.remove(viewID)
-                player.pause()
-            }
+            .onDisappear { player.pause() }
+            .platformExtras(self)
     }
 
     @ViewBuilder
@@ -68,25 +113,39 @@ struct DocumentView: View {
                 document.cancelTranscription()
             }
         } else if document.hasTranscript {
-            EditorView(document: document, state: state, player: player)
+            EditorView(document: document, state: state, player: player, onExport: export,
+                       onRelink: { importerRelinks = true; showFileImporter = true })
         } else if document.hasMedia {
             ReadyView(document: document, player: player) {
                 startTranscription()
             }
         } else {
-            DropZoneView(isMissingMedia: document.mediaMissing, onChoose: chooseMedia)
+            #if os(macOS)
+            DropZoneView(isMissingMedia: document.mediaMissing, onChoose: { importerRelinks = document.mediaMissing; showFileImporter = true })
+            #else
+            DropZoneView(isMissingMedia: document.mediaMissing, onChoose: { importerRelinks = document.mediaMissing; showFileImporter = true },
+                         photoSelection: $photoSelection)
+            #endif
         }
+    }
+
+    private var confirmationTitle: String {
+        confirmation == .rebuildCues ? "Rebuild cues from the subtitle settings?" : "Transcribe this file again?"
     }
 
     // MARK: - Media intake
 
     private func handleDrop(_ urls: [URL]) -> Bool {
         let media = urls.filter { PendingMedia.isMedia($0) }
+        #if os(macOS)
         let projects = urls.filter { PendingMedia.isProject($0) }
         for project in projects {
             NSDocumentController.shared.openDocument(withContentsOf: project, display: true) { _, _, _ in }
         }
         guard !media.isEmpty else { return !projects.isEmpty }
+        #else
+        guard !media.isEmpty else { return false }
+        #endif
         var remaining = media[...]
         if !document.hasMedia || document.mediaMissing && !document.hasTranscript {
             attach(remaining.removeFirst())
@@ -95,17 +154,24 @@ struct DocumentView: View {
             document.relinkMedia(remaining.removeFirst())
         }
         for url in remaining {
-            newDocument { TranscriptDocument(mediaURL: url) }
+            openInNewOrHere(url)
         }
         return true
     }
 
-    private func adoptPendingMediaIfEmpty() {
-        guard !document.hasMedia, let url = pending.take() else { return }
+    /// On the Mac a second file gets its own window; on iPhone and iPad it replaces this document's
+    /// media and the transcript is redone (undoable).
+    private func openInNewOrHere(_ url: URL) {
+        #if os(macOS)
+        if document.hasMedia {
+            newDocument { TranscriptDocument(mediaURL: url) }
+            return
+        }
+        #endif
         attach(url)
     }
 
-    private func attach(_ url: URL) {
+    fileprivate func attach(_ url: URL) {
         document.attachMedia(url, undoManager: undoManager)
         startTranscription()
     }
@@ -114,18 +180,92 @@ struct DocumentView: View {
         document.startTranscription(locale: settings.locale, cueSettings: settings.cueSettings, undoManager: undoManager)
     }
 
-    private func chooseMedia() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = PendingMedia.acceptedTypes
-        panel.message = "Choose a video or audio file to transcribe."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        if document.mediaMissing, document.hasTranscript {
-            document.relinkMedia(url)
-        } else {
-            attach(url)
-        }
+    // MARK: - Export
+
+    private func export(_ format: ExportFormat) {
+        #if os(macOS)
+        ExportPanel.run(document: document, format: format)
+        #else
+        let text = TranscriptExporter.export(document.cues, as: format, title: document.suggestedBaseName,
+                                             cueSettings: document.cueSettings, paragraphGap: settings.paragraphGap)
+        exportRequest = ExportRequest(format: format, file: ExportedTextFile(text: text),
+                                      name: document.suggestedBaseName + "." + format.fileExtension)
+        #endif
+    }
+
+    // MARK: - Platform extras
+
+    #if os(macOS)
+    fileprivate func macExtras<Content: View>(_ view: Content) -> some View {
+        view
+            .onAppear {
+                adoptPendingMediaIfEmpty()
+                #if DEBUG
+                if CommandLine.arguments.contains("-OpenSettings") { openSettings() }
+                #endif
+            }
+            .onChange(of: PendingMedia.shared.urls.count) { adoptPendingMediaIfEmpty() }
+            .onChange(of: document.hasMedia, initial: true) { _, hasMedia in
+                if hasMedia {
+                    PendingMedia.shared.emptyDocumentIDs.remove(viewID)
+                } else {
+                    PendingMedia.shared.emptyDocumentIDs.insert(viewID)
+                }
+            }
+            .onDisappear { PendingMedia.shared.emptyDocumentIDs.remove(viewID) }
+    }
+
+    private func adoptPendingMediaIfEmpty() {
+        guard !document.hasMedia, let url = PendingMedia.shared.take() else { return }
+        attach(url)
+    }
+    #else
+    fileprivate func iOSExtras<Content: View>(_ view: Content) -> some View {
+        view
+            .onChange(of: photoSelection) { _, item in
+                guard let item else { return }
+                Task {
+                    do {
+                        if let movie = try await item.loadTransferable(type: ImportedMovie.self) {
+                            attach(movie.url)
+                        } else {
+                            importError = "That item isn't a video Transcriber can read."
+                        }
+                    } catch {
+                        importError = error.localizedDescription
+                    }
+                    photoSelection = nil
+                }
+            }
+            .fileExporter(isPresented: Binding(get: { exportRequest != nil }, set: { if !$0 { exportRequest = nil } }),
+                          document: exportRequest?.file,
+                          contentType: UTType(filenameExtension: exportRequest?.format.fileExtension ?? "txt") ?? .plainText,
+                          defaultFilename: exportRequest?.name) { _ in
+                exportRequest = nil
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsSheet()
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                }
+            }
+    }
+    #endif
+}
+
+private extension View {
+    func platformExtras(_ document: DocumentView) -> some View {
+        #if os(macOS)
+        document.macExtras(self)
+        #else
+        document.iOSExtras(self)
+        #endif
     }
 }
 
@@ -146,6 +286,7 @@ struct ReadyView: View {
             VStack(spacing: 6) {
                 Text(document.mediaFileName ?? "")
                     .font(.title3.weight(.semibold))
+                    .multilineTextAlignment(.center)
                 if player.duration > 0 {
                     Text(TimeFormat.clock(player.duration))
                         .foregroundStyle(.secondary)
@@ -168,11 +309,15 @@ struct ReadyView: View {
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
             HStack(spacing: 6) {
+                #if os(macOS)
                 Text("Spoken language")
                     .foregroundStyle(.secondary)
                 LanguagePicker(selection: $settings.localeIdentifier)
                     .labelsHidden()
                     .fixedSize()
+                #else
+                LanguagePicker(selection: $settings.localeIdentifier, label: "Spoken language")
+                #endif
             }
             .font(.callout)
             Spacer()

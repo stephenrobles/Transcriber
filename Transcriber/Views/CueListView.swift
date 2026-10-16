@@ -38,18 +38,13 @@ struct CueListView: View {
                 }
             }
             .listStyle(.inset)
-            .alternatingRowBackgrounds(.disabled)
+            .macListTweaks()
             .contextMenu(forSelectionType: UUID.self) { ids in
                 contextMenu(for: ids)
             } primaryAction: { ids in
                 if let id = ids.first, let cue = cues.first(where: { $0.id == id }) {
                     player.seek(to: cue.start)
                 }
-            }
-            .onDeleteCommand {
-                guard state.editingCueID == nil else { return }
-                document.delete(state.selection, undoManager: undoManager)
-                state.selection = []
             }
             .onKeyPress(.space) {
                 guard state.editingCueID == nil, player.isLoaded else { return .ignored }
@@ -72,6 +67,11 @@ struct CueListView: View {
             }
             .onChange(of: state.editingCueID) { _, id in
                 if let id { state.selection = [id] }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .deleteSelectedCues)) { _ in
+                guard state.editingCueID == nil else { return }
+                document.delete(state.selection, undoManager: undoManager)
+                state.selection = []
             }
         }
     }
@@ -98,4 +98,20 @@ struct CueListView: View {
             }
         }
     }
+}
+
+private extension View {
+    @ViewBuilder
+    func macListTweaks() -> some View {
+        #if os(macOS)
+        self.alternatingRowBackgrounds(.disabled)
+            .onDeleteCommand { NotificationCenter.default.post(name: .deleteSelectedCues, object: nil) }
+        #else
+        self
+        #endif
+    }
+}
+
+extension Notification.Name {
+    static let deleteSelectedCues = Notification.Name("fm.beard.Transcriber.deleteSelectedCues")
 }

@@ -1,3 +1,4 @@
+#if os(macOS)
 import AVFoundation
 import Foundation
 
@@ -60,3 +61,4 @@ enum WatchProcessor {
         return candidate
     }
 }
+#endif

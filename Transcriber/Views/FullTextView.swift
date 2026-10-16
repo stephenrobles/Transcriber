@@ -33,7 +33,7 @@ struct FullTextView: View {
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(Color.textBackground)
         .toolbar {
             ToolbarItemGroup {
                 Toggle(isOn: $state.showTimestampsInText) {
@@ -44,8 +44,7 @@ struct FullTextView: View {
                     let text = state.showTimestampsInText
                         ? TranscriptExporter.timestampedText(document.cues, paragraphGap: settings.paragraphGap)
                         : TranscriptExporter.plainText(document.cues, paragraphGap: settings.paragraphGap)
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
+                    Pasteboard.copy(text)
                 } label: {
                     Label("Copy All", systemImage: "doc.on.doc")
                 }

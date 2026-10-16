@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import ServiceManagement
 
@@ -30,3 +31,4 @@ enum LoginItem {
         string.utf8.reduce(0) { ($0 << 8) | FourCharCode($1) }
     }
 }
+#endif

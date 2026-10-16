@@ -71,7 +71,7 @@ struct FindReplaceBar: View {
         .background(.bar)
         .onAppear { focusedField = .find }
         .onChange(of: state.findFieldFocusRequest) { focusedField = .find }
-        .onExitCommand { state.hideFind() }
+        .cancelOnEscape { state.hideFind() }
     }
 
     private func countLabel(_ count: Int, position: Int?) -> String {

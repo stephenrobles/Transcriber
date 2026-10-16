@@ -1,17 +1,22 @@
-import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 @main
 struct TranscriberApp: App {
+    #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
         // A new window with the drop zone is the whole point; skip the Open panel macOS would show at launch.
         UserDefaults.standard.register(defaults: ["NSShowAppCentricOpenPanelInsteadOfUntitledFile": false])
     }
+    #endif
 
     var body: some Scene {
+        #if os(macOS)
         DocumentGroup(newDocument: { TranscriptDocument() }) { configuration in
             DocumentView(document: configuration.document)
                 .frame(minWidth: 720, minHeight: 480)
@@ -25,9 +30,18 @@ struct TranscriberApp: App {
             SettingsView()
         }
         .windowResizability(.contentSize)
+        #else
+        DocumentGroup(newDocument: { TranscriptDocument() }) { configuration in
+            DocumentView(document: configuration.document)
+        }
+        .commands {
+            AppCommands()
+        }
+        #endif
     }
 }
 
+#if os(macOS)
 /// Receives media files opened from the Finder, the Dock icon, or `open -a Transcriber file.mp4`.
 /// Project files go through the document system as usual.
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -79,3 +93,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+#endif

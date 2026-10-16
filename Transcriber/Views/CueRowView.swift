@@ -52,7 +52,7 @@ struct CueRowView: View {
                     .lineLimit(1...20)
                     .focused($focused)
                     .onSubmit { endEditing(commit: true) }
-                    .onExitCommand { endEditing(commit: false) }
+                    .cancelOnEscape { endEditing(commit: false) }
                     .onAppear {
                         draft = cue.text
                         DispatchQueue.main.async { focused = true }
@@ -188,5 +188,17 @@ struct TimingPopover: View {
         }
         document.updateTiming(of: cue.id, start: start, end: end, undoManager: undoManager)
         dismiss()
+    }
+}
+
+extension View {
+    /// Esc cancels on the Mac (and on iPad with a keyboard); harmless elsewhere.
+    @ViewBuilder
+    func cancelOnEscape(_ action: @escaping () -> Void) -> some View {
+        #if os(macOS)
+        onExitCommand(perform: action)
+        #else
+        onKeyPress(.escape) { action(); return .handled }
+        #endif
     }
 }
