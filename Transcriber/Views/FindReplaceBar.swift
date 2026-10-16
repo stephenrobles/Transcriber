@@ -11,59 +11,24 @@ struct FindReplaceBar: View {
     var body: some View {
         let matches = state.allMatches(in: document.cues)
         let position = state.currentMatch.flatMap { current in matches.firstIndex { $0.id == current } }
+        #if os(macOS)
         HStack(spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Find", text: $state.findQuery)
-                    .textFieldStyle(.plain)
-                    .focused($focusedField, equals: .find)
-                    .onSubmit { state.step(1, in: document.cues) }
-                Toggle(isOn: $state.matchCase) { Text("Aa") }
-                    .toggleStyle(.button)
-                    .controlSize(.small)
-                    .help("Match case")
-                Toggle(isOn: $state.wholeWords) { Image(systemName: "textformat.abc.dottedunderline") }
-                    .toggleStyle(.button)
-                    .controlSize(.small)
-                    .help("Whole words")
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
-            .frame(maxWidth: 360)
-
+            findField
             Text(countLabel(matches.count, position: position))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .frame(minWidth: 70, alignment: .leading)
-
-            Button { state.step(-1, in: document.cues) } label: { Image(systemName: "chevron.up") }
-                .disabled(matches.isEmpty)
-                .help("Previous match (⇧⌘G)")
-            Button { state.step(1, in: document.cues) } label: { Image(systemName: "chevron.down") }
-                .disabled(matches.isEmpty)
-                .help("Next match (⌘G)")
-
+            stepButtons(matches)
             Divider().frame(height: 18)
-
             TextField("Replace", text: $state.replacement)
                 .textFieldStyle(.roundedBorder)
                 .focused($focusedField, equals: .replace)
                 .frame(maxWidth: 240)
                 .onSubmit { replaceCurrent() }
-            Button("Replace") { replaceCurrent() }
-                .disabled(matches.isEmpty)
-            Button("All") { replaceAll() }
-                .disabled(matches.isEmpty)
-                .help("Replace all matches")
-
+            replaceButtons(matches)
             Spacer()
-
-            Button { state.hideFind() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                .buttonStyle(.plain)
-                .help("Close (Esc)")
+            closeButton
         }
         .controlSize(.small)
         .padding(.horizontal, 12)
@@ -72,6 +37,86 @@ struct FindReplaceBar: View {
         .onAppear { focusedField = .find }
         .onChange(of: state.findFieldFocusRequest) { focusedField = .find }
         .cancelOnEscape { state.hideFind() }
+        #else
+        // Two rows on iPhone and iPad so the text fields keep their width.
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                findField
+                stepButtons(matches)
+                closeButton
+            }
+            HStack(spacing: 8) {
+                TextField("Replace", text: $state.replacement)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .replace)
+                    .onSubmit { replaceCurrent() }
+                replaceButtons(matches)
+                Text(countLabel(matches.count, position: position))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .onAppear { focusedField = .find }
+        .onChange(of: state.findFieldFocusRequest) { focusedField = .find }
+        .cancelOnEscape { state.hideFind() }
+        #endif
+    }
+
+    private var findField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Find", text: $state.findQuery)
+                .textFieldStyle(.plain)
+                .focused($focusedField, equals: .find)
+                .onSubmit { state.step(1, in: document.cues) }
+                .frame(minWidth: 80, maxWidth: .infinity)
+            Toggle(isOn: $state.matchCase) { Text("Aa") }
+                .toggleStyle(.button)
+                .controlSize(.small)
+                .help("Match case")
+            Toggle(isOn: $state.wholeWords) { Image(systemName: "textformat.abc.dottedunderline") }
+                .toggleStyle(.button)
+                .controlSize(.small)
+                .help("Whole words")
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: 360)
+    }
+
+    private func stepButtons(_ matches: [EditorState.Match]) -> some View {
+        HStack(spacing: 4) {
+            Button { state.step(-1, in: document.cues) } label: { Image(systemName: "chevron.up") }
+                .disabled(matches.isEmpty)
+                .help("Previous match (⇧⌘G)")
+            Button { state.step(1, in: document.cues) } label: { Image(systemName: "chevron.down") }
+                .disabled(matches.isEmpty)
+                .help("Next match (⌘G)")
+        }
+    }
+
+    private func replaceButtons(_ matches: [EditorState.Match]) -> some View {
+        HStack(spacing: 8) {
+            Button("Replace") { replaceCurrent() }
+                .disabled(matches.isEmpty)
+            Button("All") { replaceAll() }
+                .disabled(matches.isEmpty)
+                .help("Replace all matches")
+        }
+    }
+
+    private var closeButton: some View {
+        Button { state.hideFind() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+            .buttonStyle(.plain)
+            .help("Close (Esc)")
     }
 
     private func countLabel(_ count: Int, position: Int?) -> String {

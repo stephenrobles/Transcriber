@@ -251,6 +251,18 @@ async function prepare() {
   }
 }
 
+/// Pulls a platform's pending review submission so a new build can be attached and resubmitted.
+async function cancel() {
+  const a = await app();
+  const subs = await get(`/apps/${a.id}/reviewSubmissions?filter[state]=WAITING_FOR_REVIEW,READY_FOR_REVIEW,UNRESOLVED_ISSUES&limit=10`);
+  for (const platform of wanted()) {
+    const sub = subs.data.find((x) => x.attributes.platform === platform);
+    if (!sub) { console.log(`${platform}: nothing waiting for review`); continue; }
+    await patch(`/reviewSubmissions/${sub.id}`, { data: { type: "reviewSubmissions", id: sub.id, attributes: { canceled: true } } });
+    console.log(`${platform}: review submission ${sub.id} cancelled (${sub.attributes.state})`);
+  }
+}
+
 async function status() {
   const a = await app();
   console.log(`${a.attributes.name} (${a.id})`);
@@ -262,7 +274,7 @@ async function status() {
   }
 }
 
-const commands = { metadata, screenshots, attach, submit, status, prepare };
+const commands = { metadata, screenshots, attach, submit, status, prepare, cancel };
 const cmd = commands[process.argv[2]];
 if (!cmd) { console.error("usage: node Tools/appstore.mjs metadata|screenshots|attach|submit|status [--platform ios|mac|all]"); process.exit(1); }
 cmd().catch((e) => { console.error(e.message); process.exit(1); });
