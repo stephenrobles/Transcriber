@@ -43,6 +43,8 @@
 	<true/>
 	<key>UIFileSharingEnabled</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Transcriber turns the speech in your audio and video files into text, entirely on this device.</string>
 </dict>
