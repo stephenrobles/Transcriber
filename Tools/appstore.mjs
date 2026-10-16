@@ -147,7 +147,7 @@ async function metadata() {
   }
 }
 
-const DISPLAY_TYPES = { mac: "APP_DESKTOP", iphone: "APP_IPHONE_67", ipad: "APP_IPAD_PRO_3GEN_129" };
+const DISPLAY_TYPES = { mac: "APP_DESKTOP", iphone: "APP_IPHONE_61", ipad: "APP_IPAD_PRO_3GEN_129" };
 async function screenshots() {
   const a = await app();
   for (const platform of wanted()) {
@@ -159,6 +159,8 @@ async function screenshots() {
       const files = readdirSync(join(ROOT, "AppStore/screenshots")).filter((f) => f.startsWith(kind + "-") && f.endsWith(".png")).sort();
       if (!files.length) continue;
       const sets = await get(`/appStoreVersionLocalizations/${loc.id}/appScreenshotSets`);
+      const stale = { iphone: ["APP_IPHONE_67", "APP_IPHONE_65"], ipad: ["APP_IPAD_PRO_129"], mac: [] }[kind];
+      for (const old of sets.data.filter((s) => stale.includes(s.attributes.screenshotDisplayType))) await del(`/appScreenshotSets/${old.id}`);
       let set = sets.data.find((s) => s.attributes.screenshotDisplayType === DISPLAY_TYPES[kind]);
       if (set) { for (const shot of (await get(`/appScreenshotSets/${set.id}/appScreenshots`)).data) await del(`/appScreenshots/${shot.id}`); }
       else set = (await post("/appScreenshotSets", { data: { type: "appScreenshotSets", attributes: { screenshotDisplayType: DISPLAY_TYPES[kind] }, relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: loc.id } } } } })).data;
@@ -202,6 +204,53 @@ async function submit() {
   }
 }
 
+/// Age rating (nothing applies), privacy (data not collected), content rights, and a free price.
+async function prepare() {
+  const a = await app();
+  await patch(`/apps/${a.id}`, { data: { type: "apps", id: a.id, attributes: { contentRightsDeclaration: "DOES_NOT_USE_THIRD_PARTY_CONTENT" } } });
+  console.log("content rights: does not use third-party content");
+
+  for (const platform of wanted()) {
+    const v = await version(a.id, platform);
+    // The version's declaration shares the version's id; the app-info one is a separate record. Set both.
+    const infos = await get(`/apps/${a.id}/appInfos`);
+    const infoDecl = await get(`/appInfos/${infos.data[0].id}/ageRatingDeclaration`).catch(() => null);
+    const declIds = [v.id, infoDecl?.data?.id].filter(Boolean);
+    const none = ["alcoholTobaccoOrDrugUseOrReferences", "contests", "gamblingSimulated", "horrorOrFearThemes", "matureOrSuggestiveThemes",
+      "medicalOrTreatmentInformation", "profanityOrCrudeHumor", "sexualContentGraphicAndNudity", "sexualContentOrNudity", "gunsOrOtherWeapons",
+      "violenceCartoonOrFantasy", "violenceRealistic", "violenceRealisticProlongedGraphicOrSadistic"];
+    const no = ["gambling", "unrestrictedWebAccess", "lootBox", "advertising", "messagingAndChat", "userGeneratedContent", "parentalControls", "healthOrWellnessTopics"];
+    const attrs = { ageAssurance: false, kidsAgeBand: null };
+    for (const k of none) attrs[k] = "NONE";
+    for (const k of no) attrs[k] = false;
+    for (const id of declIds) {
+      try {
+        await patch(`/ageRatingDeclarations/${id}`, { data: { type: "ageRatingDeclarations", id, attributes: attrs } });
+        console.log(`${platform}: age rating declared on ${id} (nothing applies)`);
+      } catch (e) { if (!/NOT_FOUND/.test(e.message)) console.log(`${platform}: age rating on ${id}: ${e.message.slice(0, 600)}`); }
+    }
+  }
+
+  // App privacy ("Data Not Collected") has no public API; it is set once in App Store Connect's App Privacy section.
+  console.log("privacy: set 'Data Not Collected' in App Store Connect › App Privacy and publish (no API)");
+
+  // Pricing: free, base territory USA.
+  const schedule = await get(`/apps/${a.id}/appPriceSchedule`).catch(() => null);
+  const manual = schedule?.data ? await get(`/appPriceSchedules/${schedule.data.id}/manualPrices?limit=5`).catch(() => null) : null;
+  if (!manual?.data?.length) {
+    const points = await get(`/apps/${a.id}/appPricePoints?filter[territory]=USA&limit=200`);
+    const free = points.data.find((p) => Number(p.attributes.customerPrice) === 0);
+    if (!free) throw new Error("no free price point found");
+    await post("/appPriceSchedules", { data: { type: "appPriceSchedules", relationships: {
+      app: { data: { type: "apps", id: a.id } }, baseTerritory: { data: { type: "territories", id: "USA" } },
+      manualPrices: { data: [{ type: "appPrices", id: "${price-free}" }] } } },
+      included: [{ type: "appPrices", id: "${price-free}", attributes: { startDate: null }, relationships: { appPricePoint: { data: { type: "appPricePoints", id: free.id } } } }] });
+    console.log("pricing: free in all territories (base USA)");
+  } else {
+    console.log("pricing: already set");
+  }
+}
+
 async function status() {
   const a = await app();
   console.log(`${a.attributes.name} (${a.id})`);
@@ -213,7 +262,7 @@ async function status() {
   }
 }
 
-const commands = { metadata, screenshots, attach, submit, status };
+const commands = { metadata, screenshots, attach, submit, status, prepare };
 const cmd = commands[process.argv[2]];
 if (!cmd) { console.error("usage: node Tools/appstore.mjs metadata|screenshots|attach|submit|status [--platform ios|mac|all]"); process.exit(1); }
 cmd().catch((e) => { console.error(e.message); process.exit(1); });
