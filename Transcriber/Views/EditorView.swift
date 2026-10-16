@@ -43,16 +43,6 @@ struct EditorView: View {
             ToolbarItem(placement: .principal) {
                 tabButton(.text)
             }
-            #else
-            ToolbarItem(placement: .principal) {
-                Picker("View", selection: $state.tab) {
-                    ForEach(EditorState.Tab.allCases) { tab in
-                        Text(tab.title).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 150)
-            }
             #endif
             ToolbarItemGroup {
                 Button {
@@ -129,6 +119,25 @@ struct EditorView: View {
 
     private var statusBar: some View {
         HStack(spacing: 14) {
+            #if os(iOS)
+            // The document title's menu covers the toolbar's principal slot on iPhone, so the view switch lives here.
+            Picker("View", selection: $state.tab) {
+                ForEach(EditorState.Tab.allCases) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 150)
+            .controlSize(.small)
+            if let transcript = document.transcript {
+                Spacer(minLength: 8)
+                languageMenu(current: transcript.localeIdentifier)
+                    .lineLimit(1)
+                Text("\(transcript.cues.count) cues")
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            #else
             if let transcript = document.transcript {
                 languageMenu(current: transcript.localeIdentifier)
                 Text("\(transcript.cues.count) cues")
@@ -138,7 +147,6 @@ struct EditorView: View {
                 Text(TimeFormat.clock(player.duration))
             }
             Spacer()
-            #if os(macOS)
             if state.tab == .cues {
                 Text("Click a cue's text to edit it. ⌘↩ splits at the cursor.")
                     .foregroundStyle(.tertiary)
@@ -149,7 +157,7 @@ struct EditorView: View {
         .foregroundStyle(.secondary)
         .monospacedDigit()
         .padding(.horizontal, 12)
-        .padding(.vertical, 5)
+        .padding(.vertical, 6)
         .background(.bar)
     }
 }
