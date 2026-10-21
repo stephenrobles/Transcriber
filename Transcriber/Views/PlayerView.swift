@@ -6,6 +6,8 @@ struct PlayerView: View {
     @Bindable var player: PlayerController
     /// The cue being spoken, drawn over the video when captions are on.
     var caption: String?
+    /// Height of the video; nil lets it fill whatever space the layout gives it.
+    var videoHeight: CGFloat? = 260
     @State private var scrubTime: TimeInterval?
 
     private var settings: AppSettings { AppSettings.shared }
@@ -19,7 +21,8 @@ struct PlayerView: View {
                     }
                 }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 260)
+                    .frame(height: videoHeight)
+                    .frame(maxHeight: videoHeight == nil ? .infinity : nil)
                     .background(.black)
                 Divider()
             }

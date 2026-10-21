@@ -12,28 +12,12 @@ struct EditorView: View {
 
     private var settings: AppSettings { AppSettings.shared }
 
+    #if os(iOS)
+    let hinge: HingeMonitor
+    #endif
+
     var body: some View {
-        VStack(spacing: 0) {
-            if document.hasMedia, player.isLoaded {
-                PlayerView(player: player, caption: currentCaption)
-                Divider()
-            } else if document.mediaMissing {
-                MissingMediaBanner(document: document, onLocate: onRelink)
-                Divider()
-            }
-            if state.findVisible {
-                FindReplaceBar(document: document, state: state)
-                Divider()
-            }
-            switch state.tab {
-            case .cues:
-                CueListView(document: document, state: state, player: player)
-            case .text:
-                FullTextView(document: document, state: state)
-            }
-            Divider()
-            statusBar
-        }
+        layout
         .platformToolbarStyle()
         .toolbar {
             #if os(macOS)
@@ -61,6 +45,106 @@ struct EditorView: View {
                 .help("Export the transcript")
             }
         }
+    }
+
+    // MARK: - Layout
+
+    /// On the Mac and in portrait on iPhone and iPad: player on top, list below. In a wide window
+    /// (iPad landscape, a foldable's inner display) the player sits beside the list. While a foldable
+    /// is bent, the two panes sit either side of the hinge and nothing is drawn across it.
+    @ViewBuilder
+    private var layout: some View {
+        #if os(macOS)
+        stacked(videoHeight: 260)
+        #else
+        GeometryReader { proxy in
+            let size = proxy.size
+            if let split = hinge.split(for: proxy.frame(in: .global)) {
+                switch split.axis {
+                case .horizontal:
+                    VStack(spacing: 0) {
+                        playerPane(videoFills: true)
+                            .frame(height: split.firstPaneLength)
+                        hingeBand(height: split.band)
+                        listPane
+                    }
+                case .vertical:
+                    HStack(spacing: 0) {
+                        playerPane(videoFills: true)
+                            .frame(width: split.firstPaneLength)
+                        hingeBand(width: split.band)
+                        listPane
+                    }
+                }
+            } else if size.width > size.height, size.width >= 800, hasPlayerPane {
+                HStack(spacing: 0) {
+                    playerPane(videoFills: true)
+                        .frame(width: (size.width * 0.5).rounded())
+                    Divider()
+                    listPane
+                }
+            } else {
+                stacked(videoHeight: size.width > size.height ? min(260, size.height * 0.45) : 260)
+            }
+        }
+        #endif
+    }
+
+    private var hasPlayerPane: Bool {
+        document.hasMedia && player.isLoaded && player.hasVideo
+    }
+
+    private func stacked(videoHeight: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            if document.hasMedia, player.isLoaded {
+                PlayerView(player: player, caption: currentCaption, videoHeight: videoHeight)
+                Divider()
+            } else if document.mediaMissing {
+                MissingMediaBanner(document: document, onLocate: onRelink)
+                Divider()
+            }
+            listPane
+        }
+    }
+
+    /// The player with the video filling its pane, or the missing-media banner.
+    @ViewBuilder
+    private func playerPane(videoFills: Bool) -> some View {
+        if document.hasMedia, player.isLoaded {
+            PlayerView(player: player, caption: currentCaption, videoHeight: videoFills ? nil : 260)
+        } else if document.mediaMissing {
+            VStack {
+                MissingMediaBanner(document: document, onLocate: onRelink)
+                Spacer()
+            }
+        } else {
+            Color.clear
+        }
+    }
+
+    private var listPane: some View {
+        VStack(spacing: 0) {
+            if state.findVisible {
+                FindReplaceBar(document: document, state: state)
+                Divider()
+            }
+            switch state.tab {
+            case .cues:
+                CueListView(document: document, state: state, player: player)
+            case .text:
+                FullTextView(document: document, state: state)
+            }
+            Divider()
+            statusBar
+        }
+    }
+
+    /// The strip over the fold: nothing of the app's content is drawn here.
+    private func hingeBand(width: CGFloat? = nil, height: CGFloat? = nil) -> some View {
+        Rectangle()
+            .fill(Color.textBackground)
+            .frame(width: width, height: height)
+            .frame(maxWidth: width == nil ? .infinity : nil, maxHeight: height == nil ? .infinity : nil)
     }
 
     private func tabButton(_ tab: EditorState.Tab) -> some View {

@@ -119,11 +119,25 @@ final class TranscriptDocument: ReferenceFileDocument, ObservableObject {
         }
     }
 
-    func relinkMedia(_ url: URL) {
+    /// Points a project whose media went missing at the file again. Registers an undo so the
+    /// document counts as edited and the new bookmark is saved; otherwise the link is lost on relaunch.
+    func relinkMedia(_ url: URL, undoManager: UndoManager? = nil) {
+        let previousURL = mediaURL
+        let wasMissing = mediaMissing
         mediaAccess = ScopedAccess(url: url)
         mediaURL = url
         mediaFileName = url.lastPathComponent
         mediaMissing = false
+        undoManager?.registerUndo(withTarget: self) { doc in
+            if let previousURL {
+                doc.relinkMedia(previousURL, undoManager: undoManager)
+            } else {
+                doc.mediaAccess = nil
+                doc.mediaURL = nil
+                doc.mediaMissing = wasMissing
+            }
+        }
+        undoManager?.setActionName("Locate Media")
     }
 
     // MARK: - Transcription

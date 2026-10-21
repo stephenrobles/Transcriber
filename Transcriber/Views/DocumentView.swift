@@ -12,6 +12,9 @@ struct DocumentView: View {
     let document: TranscriptDocument
     @State private var state = EditorState()
     @State private var player = PlayerController()
+    #if os(iOS)
+    @State fileprivate var hinge = HingeMonitor()
+    #endif
     @State private var viewID = UUID()
     @State private var dropTargeted = false
     @State private var showFileImporter = false
@@ -67,7 +70,7 @@ struct DocumentView: View {
             .fileImporter(isPresented: $showFileImporter, allowedContentTypes: PendingMedia.acceptedTypes, allowsMultipleSelection: false) { result in
                 guard case .success(let urls) = result, let url = urls.first else { return }
                 if importerRelinks || (document.mediaMissing && document.hasTranscript) {
-                    document.relinkMedia(url)
+                    document.relinkMedia(url, undoManager: undoManager)
                 } else {
                     openInNewOrHere(url)
                 }
@@ -104,29 +107,51 @@ struct DocumentView: View {
             }
             .onDisappear { player.pause() }
             .platformExtras(self)
+            .observingHinge(self)
     }
 
     @ViewBuilder
     private var content: some View {
         if let job = document.job, job.isRunning {
-            TranscribingView(job: job, fileName: document.mediaFileName ?? "") {
-                document.cancelTranscription()
+            foldPane {
+                TranscribingView(job: job, fileName: document.mediaFileName ?? "") {
+                    document.cancelTranscription()
+                }
             }
         } else if document.hasTranscript {
+            #if os(macOS)
             EditorView(document: document, state: state, player: player, onExport: export,
                        onRelink: { importerRelinks = true; showFileImporter = true })
+            #else
+            EditorView(document: document, state: state, player: player, onExport: export,
+                       onRelink: { importerRelinks = true; showFileImporter = true }, hinge: hinge)
+            #endif
         } else if document.hasMedia {
-            ReadyView(document: document, player: player) {
-                startTranscription()
+            foldPane {
+                ReadyView(document: document, player: player) {
+                    startTranscription()
+                }
             }
         } else {
             #if os(macOS)
             DropZoneView(isMissingMedia: document.mediaMissing, onChoose: { importerRelinks = document.mediaMissing; showFileImporter = true })
             #else
-            DropZoneView(isMissingMedia: document.mediaMissing, onChoose: { importerRelinks = document.mediaMissing; showFileImporter = true },
-                         photoSelection: $photoSelection)
+            foldPane {
+                DropZoneView(isMissingMedia: document.mediaMissing, onChoose: { importerRelinks = document.mediaMissing; showFileImporter = true },
+                             photoSelection: $photoSelection)
+            }
             #endif
         }
+    }
+
+    /// On a bent foldable, keeps a full-screen view in the pane away from the hinge; elsewhere a no-op.
+    @ViewBuilder
+    private func foldPane<Content: View>(@ViewBuilder _ content: @escaping () -> Content) -> some View {
+        #if os(iOS)
+        FoldPane(monitor: hinge, content: content)
+        #else
+        content()
+        #endif
     }
 
     private var confirmationTitle: String {
@@ -151,7 +176,7 @@ struct DocumentView: View {
             attach(remaining.removeFirst())
         } else if document.mediaMissing {
             // A project whose media went missing: the dropped file stands in for it.
-            document.relinkMedia(remaining.removeFirst())
+            document.relinkMedia(remaining.removeFirst(), undoManager: undoManager)
         }
         for url in remaining {
             openInNewOrHere(url)
@@ -260,6 +285,15 @@ struct DocumentView: View {
 }
 
 private extension View {
+    @ViewBuilder
+    func observingHinge(_ document: DocumentView) -> some View {
+        #if os(iOS)
+        self.background(HingeObserver(monitor: document.hinge))
+        #else
+        self
+        #endif
+    }
+
     func platformExtras(_ document: DocumentView) -> some View {
         #if os(macOS)
         document.macExtras(self)

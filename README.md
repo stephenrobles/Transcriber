@@ -11,6 +11,15 @@ choose a video or audio file from Files or a video from Photos (copied into the 
 at Login are Mac-only. Platform splits are `#if os(macOS)` / `#if os(iOS)` blocks; the engine,
 cue builder, exporters and project format have none.
 
+Foldable iPhone (iPhone Duo): `FoldLayout.swift` watches the hinge through UIKit's
+`UIHingeInteraction` (iOS 27.1+; older systems and flat devices see no change). On the inner
+display the editor puts the player beside the cue list when the window is wider than tall; while
+the device is bent, the player and the list sit either side of the fold with a 36 pt band kept
+clear of content, and the drop zone, ready and transcribing screens stay in the pane away from
+the hinge. The fold bisects the inner display's longer side (horizontal hinge in portrait,
+vertical in landscape). Debug builds take `TRANSCRIBER_HINGE=closed|book|open|book-h|book-v`
+to force a posture for screenshots (`SIMCTL_CHILD_TRANSCRIBER_HINGE=book xcrun simctl launch …`).
+
 A Mac app that turns a video or audio file into a transcript with Apple's on-device speech
 engine (the `SpeechAnalyzer` / `SpeechTranscriber` API in macOS 26), then lets you fix it up
 and export subtitles.
