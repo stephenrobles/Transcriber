@@ -113,13 +113,14 @@ async function metadata() {
   const info = infos.data.find((x) => x.attributes.appStoreState !== "READY_FOR_SALE") ?? infos.data[0];
   const locs = await get(`/appInfos/${info.id}/appInfoLocalizations`);
   for (const loc of locs.data.filter((l) => l.attributes.locale === "en-US")) {
-    await patch(`/appInfoLocalizations/${loc.id}`, { data: { type: "appInfoLocalizations", id: loc.id, attributes: { subtitle: META.subtitle, privacyPolicyUrl: META.privacyPolicyUrl } } });
-    console.log("app info localization updated:", loc.attributes.name);
+    // App info belongs to the live app once a version is on sale; it only becomes editable with a new version.
+    const r = await patch(`/appInfoLocalizations/${loc.id}`, { data: { type: "appInfoLocalizations", id: loc.id, attributes: { subtitle: META.subtitle, privacyPolicyUrl: META.privacyPolicyUrl } } }).catch((e) => { if (!/INVALID_STATE/.test(e.message)) throw e; return "locked"; });
+    console.log(r === "locked" ? "app info localization is live and unchanged:" : "app info localization updated:", loc.attributes.name);
   }
   const cats = await get(`/appCategories?filter[platforms]=IOS,MAC_OS&limit=200`);
   const cat = (id) => cats.data.find((c) => c.id === id) ? { type: "appCategories", id } : null;
   await patch(`/appInfos/${info.id}`, { data: { type: "appInfos", id: info.id, relationships: {
-    primaryCategory: { data: cat("PRODUCTIVITY") }, secondaryCategory: { data: cat("PHOTO_AND_VIDEO") } } } });
+    primaryCategory: { data: cat("PRODUCTIVITY") }, secondaryCategory: { data: cat("PHOTO_AND_VIDEO") } } } }).catch((e) => { if (!/INVALID_STATE/.test(e.message)) throw e; });
   console.log("categories set");
   for (const platform of wanted()) {
     const v = await version(a.id, platform);
