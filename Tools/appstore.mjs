@@ -18,8 +18,8 @@ import { fileURLToPath } from "node:url";
 const KEY_ID = process.env.ASC_KEY_ID || "Z5YD293RLM";
 const ISSUER_ID = process.env.ASC_ISSUER_ID || "69a6de84-dcf8-47e3-e053-5b8c7c11a4d1";
 const BUNDLE_ID = "fm.beard.Transcriber";
-const VERSION = "1.2";
-const BUILD = "10";
+const VERSION = "1.3";
+const BUILD = "14";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const API = "https://api.appstoreconnect.apple.com/v1";
 
@@ -123,7 +123,7 @@ async function metadata() {
   console.log("categories set");
   for (const platform of wanted()) {
     const v = await version(a.id, platform);
-    await patch(`/appStoreVersions/${v.id}`, { data: { type: "appStoreVersions", id: v.id, attributes: { copyright: META.copyright, versionString: VERSION } } });
+    await patch(`/appStoreVersions/${v.id}`, { data: { type: "appStoreVersions", id: v.id, attributes: { copyright: META.copyright, versionString: VERSION, releaseType: "AFTER_APPROVAL" } } });
     const vlocs = await get(`/appStoreVersions/${v.id}/appStoreVersionLocalizations`);
     let loc = vlocs.data.find((l) => l.attributes.locale === "en-US");
     const attrs = { description: META.description, keywords: META.keywords, promotionalText: META.promotionalText, supportUrl: META.supportUrl, marketingUrl: META.marketingUrl, whatsNew: META.whatsNew };
@@ -186,7 +186,7 @@ async function attach() {
     const v = await version(a.id, platform);
     // Newest processed build for this platform (build numbers may differ between platforms).
     const builds = await get(`/builds?filter[app]=${a.id}&filter[preReleaseVersion.platform]=${platform}&sort=-uploadedDate&limit=10`);
-    const build = builds.data.find((b) => b.attributes.processingState === "VALID");
+    const build = builds.data.find((b) => b.attributes.version === BUILD && b.attributes.processingState === "VALID") ?? builds.data.find((b) => b.attributes.processingState === "VALID");
     if (!build) { console.log(`${platform}: no processed build yet (${builds.data.map((b) => b.attributes.version + ":" + b.attributes.processingState).join(", ") || "none"})`); continue; }
     await patch(`/appStoreVersions/${v.id}/relationships/build`, { data: { type: "builds", id: build.id } });
     console.log(`${platform}: attached build ${build.attributes.version} (${build.id})`);
@@ -201,6 +201,47 @@ async function submit() {
     await post("/reviewSubmissionItems", { data: { type: "reviewSubmissionItems", relationships: { reviewSubmission: { data: { type: "reviewSubmissions", id: sub.id } }, appStoreVersion: { data: { type: "appStoreVersions", id: v.id } } } } });
     await patch(`/reviewSubmissions/${sub.id}`, { data: { type: "reviewSubmissions", id: sub.id, attributes: { submitted: true } } });
     console.log(`${platform}: submitted for review (${sub.id})`);
+  }
+}
+
+const GROUP = "Primary Tech";
+/// Puts this build in the external "Primary Tech" TestFlight group (public link, like Stephen's other apps)
+/// with the What's New text as release notes, and sends it to beta review if needed.
+async function testflight() {
+  const a = await app();
+  // Test information and beta review contact are per app; keep them in step with the listing.
+  const locs = await get(`/apps/${a.id}/betaAppLocalizations`);
+  const info = { description: META.promotionalText, feedbackEmail: "steve@beard.fm", marketingUrl: META.marketingUrl, privacyPolicyUrl: META.privacyPolicyUrl };
+  const loc = locs.data.find((l) => l.attributes.locale === "en-US");
+  if (loc) await patch(`/betaAppLocalizations/${loc.id}`, { data: { type: "betaAppLocalizations", id: loc.id, attributes: info } });
+  else await post("/betaAppLocalizations", { data: { type: "betaAppLocalizations", attributes: { locale: "en-US", ...info }, relationships: { app: { data: { type: "apps", id: a.id } } } } });
+  const detail = await get(`/apps/${a.id}/betaAppReviewDetail`);
+  const review = { contactFirstName: "Stephen", contactLastName: "Robles", contactEmail: "steve@beard.fm", demoAccountRequired: false, notes: META.reviewNotes };
+  const phone = process.env.ASC_PHONE || await reviewPhoneFromOtherApp();
+  if (phone) review.contactPhone = phone;
+  await patch(`/betaAppReviewDetails/${detail.data.id}`, { data: { type: "betaAppReviewDetails", id: detail.data.id, attributes: review } });
+
+  const groups = await get(`/apps/${a.id}/betaGroups`);
+  let group = groups.data.find((g) => g.attributes.name === GROUP);
+  if (!group) {
+    group = (await post("/betaGroups", { data: { type: "betaGroups",
+      attributes: { name: GROUP, publicLinkEnabled: true, publicLinkLimitEnabled: true, publicLinkLimit: 200, feedbackEnabled: true, iosBuildsAvailableForAppleSiliconMac: true },
+      relationships: { app: { data: { type: "apps", id: a.id } } } } })).data;
+    console.log(`created external group ${GROUP}: ${group.attributes.publicLink}`);
+  }
+
+  for (const platform of wanted()) {
+    const builds = await get(`/builds?filter[app]=${a.id}&filter[preReleaseVersion.platform]=${platform}&filter[version]=${BUILD}&sort=-uploadedDate&limit=5`);
+    const build = builds.data.find((b) => b.attributes.processingState === "VALID");
+    if (!build) { console.log(`${platform}: build ${BUILD} not processed yet (${builds.data.map((b) => b.attributes.processingState).join(", ") || "not uploaded"})`); continue; }
+    const notes = await get(`/builds/${build.id}/betaBuildLocalizations`);
+    const n = notes.data.find((x) => x.attributes.locale === "en-US");
+    if (n) await patch(`/betaBuildLocalizations/${n.id}`, { data: { type: "betaBuildLocalizations", id: n.id, attributes: { whatsNew: META.whatsNew } } });
+    else await post("/betaBuildLocalizations", { data: { type: "betaBuildLocalizations", attributes: { locale: "en-US", whatsNew: META.whatsNew }, relationships: { build: { data: { type: "builds", id: build.id } } } } });
+    await post(`/betaGroups/${group.id}/relationships/builds`, { data: [{ type: "builds", id: build.id }] });
+    let sub = await get(`/builds/${build.id}/betaAppReviewSubmission`).catch(() => null);
+    if (!sub?.data) sub = await post("/betaAppReviewSubmissions", { data: { type: "betaAppReviewSubmissions", relationships: { build: { data: { type: "builds", id: build.id } } } } });
+    console.log(`${platform}: build ${BUILD} added to ${GROUP} with release notes; beta review ${sub.data.attributes.betaReviewState}`);
   }
 }
 
@@ -274,7 +315,7 @@ async function status() {
   }
 }
 
-const commands = { metadata, screenshots, attach, submit, status, prepare, cancel };
+const commands = { metadata, screenshots, attach, submit, status, prepare, cancel, testflight };
 const cmd = commands[process.argv[2]];
-if (!cmd) { console.error("usage: node Tools/appstore.mjs metadata|screenshots|attach|submit|status [--platform ios|mac|all]"); process.exit(1); }
+if (!cmd) { console.error("usage: node Tools/appstore.mjs metadata|screenshots|attach|testflight|submit|status|prepare|cancel [--platform ios|mac|all]"); process.exit(1); }
 cmd().catch((e) => { console.error(e.message); process.exit(1); });
