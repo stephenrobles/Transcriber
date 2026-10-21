@@ -226,7 +226,7 @@ async function testflight() {
   let group = groups.data.find((g) => g.attributes.name === GROUP);
   if (!group) {
     group = (await post("/betaGroups", { data: { type: "betaGroups",
-      attributes: { name: GROUP, publicLinkEnabled: true, publicLinkLimitEnabled: true, publicLinkLimit: 200, feedbackEnabled: true, iosBuildsAvailableForAppleSiliconMac: true },
+      attributes: { name: GROUP, publicLinkEnabled: true, publicLinkLimitEnabled: true, publicLinkLimit: 200, feedbackEnabled: true },
       relationships: { app: { data: { type: "apps", id: a.id } } } } })).data;
     console.log(`created external group ${GROUP}: ${group.attributes.publicLink}`);
   }
