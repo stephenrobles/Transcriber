@@ -19,7 +19,7 @@ Everything entered in App Store Connect for 1.3, kept here as the source of trut
 - **Marketing URL:** https://beardfm.app/transcriber/
 - **App privacy:** Data Not Collected
 
-## Version Information (1.3)
+## Version Information (1.3.1)
 
 **Promotional text (170):**
 Turn any video or audio file into an editable, timestamped transcript on your own device, then export YouTube-ready subtitles or clean text. Nothing is uploaded.
@@ -59,6 +59,9 @@ Transcriber requires macOS 26, iOS 26 or iPadOS 26 and a device that supports Ap
 
 **Keywords (100):**
 transcribe,transcript,subtitles,srt,captions,speech to text,dictation,youtube,vtt,offline,private
+
+**What's New (1.3.1):**
+Made for iPhone Duo. Transcriber fills the outer display, puts the video and cue list side by side on the inner display, and keeps everything clear of the hinge when the phone is partly folded.
 
 **What's New (1.3):**
 Made for iPhone Duo. Transcriber fills the outer display, puts the video and cue list side by side on the inner display, and keeps everything clear of the hinge when the phone is partly folded. Also fixed: a media file you had located again was forgotten on the next launch.
