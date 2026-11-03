@@ -269,7 +269,7 @@ async function prepare() {
     const none = ["alcoholTobaccoOrDrugUseOrReferences", "contests", "gamblingSimulated", "horrorOrFearThemes", "matureOrSuggestiveThemes",
       "medicalOrTreatmentInformation", "profanityOrCrudeHumor", "sexualContentGraphicAndNudity", "sexualContentOrNudity", "gunsOrOtherWeapons",
       "violenceCartoonOrFantasy", "violenceRealistic", "violenceRealisticProlongedGraphicOrSadistic"];
-    const no = ["gambling", "unrestrictedWebAccess", "lootBox", "advertising", "messagingAndChat", "userGeneratedContent", "parentalControls", "healthOrWellnessTopics"];
+    const no = ["gambling", "unrestrictedWebAccess", "lootBox", "advertising", "messagingAndChat", "userGeneratedContent", "parentalControls", "healthOrWellnessTopics", "socialMedia"];
     const attrs = { ageAssurance: false, kidsAgeBand: null };
     for (const k of none) attrs[k] = "NONE";
     for (const k of no) attrs[k] = false;
