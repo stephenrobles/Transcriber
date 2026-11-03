@@ -3,7 +3,7 @@
 Five shots for the App Store `APP_IPHONE_DUO` slot, which earns the "Made for iPhone Duo"
 badge. Framed like Kan Do's, Stash's and Captioner's sets: the whole device in Apple's Duo
 frame under a centered white SF Bold headline, on Transcriber's lavender-to-purple icon
-gradient. Raw captures are in `raw/` (no status bar; see the recipe). First made for 1.3.1.
+gradient. Raw captures (inner display, real status bar) are in `raw/`. First made for 1.3.1.
 
 | Shot | Video (BT Shorts) | Seek | Look | Headline |
 |---|---|---|---|---|
@@ -31,9 +31,13 @@ gradient. Raw captures are in `raw/` (no status bar; see the recipe). First made
    `TRANSCRIBER_REPLACE` open the Find bar prefilled, `TRANSCRIBER_NO_FOCUS` keeps the keyboard
    away, `TRANSCRIBER_HINGE=closed|open|book|book-h|book-v` forces a posture. Menus and
    popovers don't survive the display move below; sheets and view state do.
-4. **Capture.** `Marketing/duo-tools/capture-duo.sh raw/NN.png`. The fold can't be scripted, so
-   the app is moved to a hidden 951 × 669 pt "Resizable" display with `devicectl device appResize`
-   and captured there: the inner display's exact size and layout, no status bar.
+4. **Capture.** Unfold the simulator in Xcode's Device Hub (the sim boots folded, inner display
+   black), set `simctl status_bar <udid> override --time 9:41 --batteryState discharging --batteryLevel 100 --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4`
+   (charging draws a green ring in the Duo status cluster), tap the project tile on the inner
+   display (Action Control at 797,140 pt; Apple Pay at 674,340; Text toggle at 558,613), then
+   `xcrun devicectl device capture screenshot --device <udid> --display-unique-id <LCD-1 id from devicectl device info displays> --destination raw/NN.png`.
+   Fallback when Device Hub isn't available: `Marketing/duo-tools/capture-duo.sh raw/NN.png`
+   moves the app to a hidden 951 × 669 pt "Resizable" display and captures it there (no status bar).
 5. **Compose.** `swiftc -O Marketing/compose-duo-frame.swift -o build/compose-duo`, then
    `build/compose-duo 2853 2007 raw/NN.png NN.png "Headline"`. The bezel and Apple's license
    are in `Marketing/Bezels/` (copied from Kan Do).
