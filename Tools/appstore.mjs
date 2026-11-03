@@ -18,8 +18,8 @@ import { fileURLToPath } from "node:url";
 const KEY_ID = process.env.ASC_KEY_ID || "Z5YD293RLM";
 const ISSUER_ID = process.env.ASC_ISSUER_ID || "69a6de84-dcf8-47e3-e053-5b8c7c11a4d1";
 const BUNDLE_ID = "fm.beard.Transcriber";
-const VERSION = "1.3";
-const BUILD = "14";
+const VERSION = "1.3.1";
+const BUILD = "15";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const API = "https://api.appstoreconnect.apple.com/v1";
 
@@ -148,25 +148,33 @@ async function metadata() {
   }
 }
 
-const DISPLAY_TYPES = { mac: "APP_DESKTOP", iphone: "APP_IPHONE_61", ipad: "APP_IPAD_PRO_3GEN_129" };
+const DISPLAY_TYPES = { mac: "APP_DESKTOP", iphone: "APP_IPHONE_61", ipad: "APP_IPAD_PRO_3GEN_129", duo: "APP_IPHONE_DUO" };
+// Where each kind's PNGs live: iPhone/iPad/Mac in AppStore/screenshots (prefixed by kind), the framed
+// iPhone Duo set (NN-*.png, 2853x2007) in Marketing/AppStore/iPhone-Duo. `--kind duo` uploads one kind only.
+const SOURCES = { duo: ["Marketing/AppStore/iPhone-Duo", /^\d\d-.*\.png$/] };
+function sourceFiles(kind) {
+  const [dir, pattern] = SOURCES[kind] ?? ["AppStore/screenshots", new RegExp(`^${kind}-.*\\.png$`)];
+  return [dir, readdirSync(join(ROOT, dir)).filter((f) => pattern.test(f)).sort()];
+}
 async function screenshots() {
   const a = await app();
+  const only = process.argv.indexOf("--kind") > 0 ? process.argv[process.argv.indexOf("--kind") + 1] : null;
   for (const platform of wanted()) {
     const v = await version(a.id, platform);
     const vlocs = await get(`/appStoreVersions/${v.id}/appStoreVersionLocalizations`);
     const loc = vlocs.data.find((l) => l.attributes.locale === "en-US");
-    const kinds = platform === "MAC_OS" ? ["mac"] : ["iphone", "ipad"];
+    const kinds = (platform === "MAC_OS" ? ["mac"] : ["iphone", "ipad", "duo"]).filter((k) => !only || k === only);
     for (const kind of kinds) {
-      const files = readdirSync(join(ROOT, "AppStore/screenshots")).filter((f) => f.startsWith(kind + "-") && f.endsWith(".png")).sort();
+      const [dir, files] = sourceFiles(kind);
       if (!files.length) continue;
       const sets = await get(`/appStoreVersionLocalizations/${loc.id}/appScreenshotSets`);
-      const stale = { iphone: ["APP_IPHONE_67", "APP_IPHONE_65"], ipad: ["APP_IPAD_PRO_129"], mac: [] }[kind];
+      const stale = { iphone: ["APP_IPHONE_67", "APP_IPHONE_65"], ipad: ["APP_IPAD_PRO_129"], mac: [] }[kind] ?? [];
       for (const old of sets.data.filter((s) => stale.includes(s.attributes.screenshotDisplayType))) await del(`/appScreenshotSets/${old.id}`);
       let set = sets.data.find((s) => s.attributes.screenshotDisplayType === DISPLAY_TYPES[kind]);
       if (set) { for (const shot of (await get(`/appScreenshotSets/${set.id}/appScreenshots`)).data) await del(`/appScreenshots/${shot.id}`); }
       else set = (await post("/appScreenshotSets", { data: { type: "appScreenshotSets", attributes: { screenshotDisplayType: DISPLAY_TYPES[kind] }, relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: loc.id } } } } })).data;
       for (const file of files) {
-        const data = readFileSync(join(ROOT, "AppStore/screenshots", file));
+        const data = readFileSync(join(ROOT, dir, file));
         const shot = (await post("/appScreenshots", { data: { type: "appScreenshots", attributes: { fileName: file, fileSize: data.length }, relationships: { appScreenshotSet: { data: { type: "appScreenshotSets", id: set.id } } } } })).data;
         for (const op of shot.attributes.uploadOperations) {
           const chunk = data.subarray(op.offset, op.offset + op.length);
@@ -318,5 +326,5 @@ async function status() {
 
 const commands = { metadata, screenshots, attach, submit, status, prepare, cancel, testflight };
 const cmd = commands[process.argv[2]];
-if (!cmd) { console.error("usage: node Tools/appstore.mjs metadata|screenshots|attach|testflight|submit|status|prepare|cancel [--platform ios|mac|all]"); process.exit(1); }
+if (!cmd) { console.error("usage: node Tools/appstore.mjs metadata|screenshots|attach|testflight|submit|status|prepare|cancel [--platform ios|mac|all] [--kind iphone|ipad|duo|mac]"); process.exit(1); }
 cmd().catch((e) => { console.error(e.message); process.exit(1); });

@@ -100,6 +100,12 @@ struct DocumentView: View {
                     await player.load(url: url)
                     #if DEBUG
                     if let seek = ProcessInfo.processInfo.environment["TRANSCRIBER_SEEK"].flatMap(Double.init) { player.seek(to: seek) }
+                    // Screenshots: TRANSCRIBER_FIND / TRANSCRIBER_REPLACE open the Find bar prefilled.
+                    if let find = ProcessInfo.processInfo.environment["TRANSCRIBER_FIND"] {
+                        state.findQuery = find
+                        state.replacement = ProcessInfo.processInfo.environment["TRANSCRIBER_REPLACE"] ?? ""
+                        state.findVisible = true
+                    }
                     #endif
                 } else {
                     player.unload()

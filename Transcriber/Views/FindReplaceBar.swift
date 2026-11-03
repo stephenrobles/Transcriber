@@ -8,6 +8,16 @@ struct FindReplaceBar: View {
 
     private enum Field { case find, replace }
 
+    /// Debug builds skip the automatic focus when TRANSCRIBER_NO_FOCUS is set, so screenshots
+    /// show the bar without the keyboard.
+    private var autofocus: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["TRANSCRIBER_NO_FOCUS"] == nil
+        #else
+        return true
+        #endif
+    }
+
     var body: some View {
         let matches = state.allMatches(in: document.cues)
         let position = state.currentMatch.flatMap { current in matches.firstIndex { $0.id == current } }
@@ -34,7 +44,7 @@ struct FindReplaceBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.bar)
-        .onAppear { focusedField = .find }
+        .onAppear { if autofocus { focusedField = .find } }
         .onChange(of: state.findFieldFocusRequest) { focusedField = .find }
         .cancelOnEscape { state.hideFind() }
         #else
@@ -62,7 +72,7 @@ struct FindReplaceBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
-        .onAppear { focusedField = .find }
+        .onAppear { if autofocus { focusedField = .find } }
         .onChange(of: state.findFieldFocusRequest) { focusedField = .find }
         .cancelOnEscape { state.hideFind() }
         #endif
