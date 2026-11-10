@@ -10,7 +10,8 @@
 #   --upload     (requires --notarize) signs the DMG for Sparkle with the EdDSA key in the keychain
 #                (account "transcriber"), copies it into the beardfm.app site as downloads/Transcriber-<version>.dmg
 #                and downloads/Transcriber.dmg, adds it to transcriber/appcast.xml (with release-notes/<version>.html
-#                if present), and deploys the site with `npm run deploy`. Commit the beardfm.app changes afterwards.
+#                if present), then publishes the site with its scripts/publish.sh: commit, push to main (beardfm.app, which
+#                serves the appcast and download) and `npm run fm:deploy` (beard.fm/app, the pages people see).
 #
 # Output: dist/Transcriber <version>.dmg
 set -euo pipefail
@@ -103,8 +104,10 @@ if [[ $UPLOAD -eq 1 ]]; then
   [[ -f "$ROOT/release-notes/$VERSION.html" ]] && NOTES=("$ROOT/release-notes/$VERSION.html")
   "$ROOT/Tools/update-appcast.py" "$SITE/site/static/transcriber/appcast.xml" "$VERSION" "$BUILDNUM" "$MIN_MACOS" \
     "https://beardfm.app/downloads/$UPDATE_NAME" "$SIGNATURE" "${NOTES[@]}"
-  (cd "$SITE" && npm run deploy > /dev/null)
-  echo "▶ Update $VERSION ($BUILDNUM) is live. Commit the beardfm.app changes (downloads/ and transcriber/appcast.xml)."
+  echo "▶ Publishing the site (push to main, then beard.fm)…"
+  "$SITE/scripts/publish.sh" "Transcriber $VERSION: DMG and Sparkle update" \
+    "site/static/downloads/$UPDATE_NAME" site/static/downloads/Transcriber.dmg site/static/transcriber/appcast.xml
+  echo "▶ Update $VERSION ($BUILDNUM) published. If site/pages/transcriber.html shows the version or size, update it and publish again."
 fi
 
 ls -la "$DMG"
